@@ -95,7 +95,7 @@
         <div class="status-bar">
             <div class="status-item">MODE: <span class="status-value live">● LIVE SOAK TEST</span></div>
             <div class="status-item">WINDOW: <span class="status-value">LAST 24H ROLLING</span></div>
-            <div class="status-item">UPDATE: <span class="status-value">1H INTERVAL</span></div>
+            <div class="status-item">UPDATE: <span class="status-value">30S INTERVAL</span></div>
         </div>
 
         <p style="text-align: center; color: #8b949e; font-size: 0.95rem; margin-bottom: 40px;">
@@ -168,9 +168,11 @@
 
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <script>
-                fetch('history.json')
-                    .then(response => response.json())
-                    .then(data => {
+                let liveChart;
+                function updateDashboard() {
+                    fetch('history.json?' + new Date().getTime())
+                        .then(response => response.json())
+                        .then(data => {
                         if (!data || data.length === 0) return;
                         
                         // Populate top column with latest snapshot
@@ -189,7 +191,8 @@
                         const luminaData = data.map(d => parseFloat(d.lumina_avg_cost_us));
 
                         const ctx = document.getElementById('liveChart').getContext('2d');
-                        new Chart(ctx, {
+                        if (liveChart) { liveChart.destroy(); }
+                        liveChart = new Chart(ctx, {
                             type: 'line',
                             data: {
                                 labels: labels,
@@ -241,6 +244,9 @@
                         });
                     })
                     .catch(err => console.error('Error loading metrics:', err));
+                }
+                updateDashboard();
+                setInterval(updateDashboard, 30000);
             </script>
         </div>
     </div>
