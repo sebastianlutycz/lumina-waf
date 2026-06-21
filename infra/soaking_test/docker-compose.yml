@@ -38,6 +38,22 @@ services:
     networks:
       - soaking_net
 
+  # Daemon pushing to Upstash Redis
+  telemetry_shipper:
+    image: alpine:latest
+    command: >
+      sh -c "apk add --no-cache bash curl jq bc && bash /scripts/export_metrics.sh"
+    volumes:
+      - ./export_metrics.sh:/scripts/export_metrics.sh:ro
+      - ../../docs:/docs:rw
+    environment:
+      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
+      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+    depends_on:
+      - shadow_exporter
+    networks:
+      - soaking_net
+
   # The ModSecurity baseline endpoint
   modsec_waf:
     image: owasp/modsecurity-crs:nginx

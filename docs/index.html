@@ -95,7 +95,7 @@
         <div class="status-bar">
             <div class="status-item">MODE: <span class="status-value live">● LIVE SOAK TEST</span></div>
             <div class="status-item">WINDOW: <span class="status-value">LAST 24H ROLLING</span></div>
-            <div class="status-item">UPDATE: <span class="status-value">30S INTERVAL</span></div>
+            <div class="status-item">UPDATE: <span class="status-value">5S INTERVAL (UPSTASH)</span></div>
         </div>
 
         <p style="text-align: center; color: #8b949e; font-size: 0.95rem; margin-bottom: 40px;">
@@ -168,12 +168,19 @@
 
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <script>
+                const UPSTASH_URL = "https://honest-salmon-131214.upstash.io/get/lumina_telemetry";
+                const UPSTASH_TOKEN = "gQAAAAAAAgCOAAIgcDIyNTNiNWU3M2ZmYzk0MTBlODYwODJhMTY1ZmZlOTJjYQ"; // Replace with READ-ONLY token!
+
                 let liveChart;
                 function updateDashboard() {
-                    fetch('history.json?' + new Date().getTime())
+                    fetch(UPSTASH_URL, {
+                        headers: { Authorization: "Bearer " + UPSTASH_TOKEN }
+                    })
                         .then(response => response.json())
-                        .then(data => {
-                        if (!data || data.length === 0) return;
+                        .then(upstashData => {
+                            if (!upstashData || !upstashData.result) return;
+                            const data = JSON.parse(upstashData.result);
+                            if (!data || data.length === 0) return;
                         
                         // Populate top column with latest snapshot
                         const latest = data[data.length - 1];
@@ -246,7 +253,7 @@
                     .catch(err => console.error('Error loading metrics:', err));
                 }
                 updateDashboard();
-                setInterval(updateDashboard, 30000);
+                setInterval(updateDashboard, 5000);
             </script>
         </div>
     </div>
