@@ -11,6 +11,9 @@ LuminaWAF is an ultra-low latency, branchless Web Application Firewall engine de
 > - Noise: CV < 5%
 > - Selection Policy: all runs included; no outlier removal unless system state violation is detected (thermal throttle / scheduler anomaly)
 > - Workload: 1000-rule CRS subset + normalized 1KB URI corpus
+> 
+> 🔒 **Scope Boundary / Disclaimer:**
+> Performance claims are valid only within the defined benchmark corpus, hardware configurations, and isolation constraints described in `/methodology`.
 
 ## 🔬 Project Nature: The LuminaC Validation Harness
 
