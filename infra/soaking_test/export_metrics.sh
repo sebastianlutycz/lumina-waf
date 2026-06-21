@@ -39,16 +39,16 @@ while true; do
         MODSEC_COST_COUNT=${MODSEC_COST_COUNT:-0}
 
         LUMINA_AVG_COST="0"
-        if [ "$LUMINA_COST_COUNT" -gt 0 ]; then
-            LUMINA_AVG_COST=$(echo "scale=2; $LUMINA_COST_SUM / $LUMINA_COST_COUNT" | bc -l)
+        if [ "$LUMINA_COST_COUNT" != "0" ] && [ -n "$LUMINA_COST_COUNT" ]; then
+            LUMINA_AVG_COST=$(awk -v sum="$LUMINA_COST_SUM" -v count="$LUMINA_COST_COUNT" 'BEGIN { printf "%.2f", sum / count }')
         fi
 
         MODSEC_AVG_COST="0"
-        if [ "$MODSEC_COST_COUNT" -gt 0 ]; then
-            MODSEC_AVG_COST=$(echo "scale=2; $MODSEC_COST_SUM / $MODSEC_COST_COUNT" | bc -l)
+        if [ "$MODSEC_COST_COUNT" != "0" ] && [ -n "$MODSEC_COST_COUNT" ]; then
+            MODSEC_AVG_COST=$(awk -v sum="$MODSEC_COST_SUM" -v count="$MODSEC_COST_COUNT" 'BEGIN { printf "%.2f", sum / count }')
         fi
 
-        TOTAL_PARITY=$(echo "scale=4; ($LUMINA_AGREEMENTS / ($LUMINA_AGREEMENTS + $LUMINA_DISAGREEMENTS + 0.0001)) * 100" | bc -l)
+        TOTAL_PARITY=$(awk -v a="$LUMINA_AGREEMENTS" -v d="$LUMINA_DISAGREEMENTS" 'BEGIN { printf "%.4f", (a / (a + d + 0.0001)) * 100 }')
 
         # Prepare new datapoint
         DATAPOINT=$(cat <<EOF
