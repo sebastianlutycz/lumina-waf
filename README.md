@@ -7,18 +7,18 @@ Traditional NGINX parsers rely on sequential `if/switch` loops, which are highly
 > **Live Soaking Test Telemetry:**
 > An interactive telemetry dashboard is available at [GitHub Pages](https://sebastianlutycz.github.io/lumina-waf/), displaying throughput metrics, tail latency stability, and overhead comparisons against vanilla NGINX and ModSecurity.
 > 
-> 🔒 **Scope Boundary / Disclaimer:**
+> **Scope Boundary / Disclaimer:**
 > Performance claims are valid only within the defined benchmark corpus, hardware configurations, and isolation constraints described in `/methodology`.
 
 ---
 
-## ⚡ Performance Context: Hardware Constraints
+## Performance Context: Hardware Constraints
 
 The primary local validation and benchmarking for this project were conducted on an **Intel i5-4210H**, a mobile processor from 2014. 
 
 This constraint is intentional. Achieving over **105,000 requests per second** on a decade-old dual-core mobile chip via AVX2 and memory alignment serves as a proof-of-concept for the efficiency of these optimizations. The relative performance gains demonstrated here scale significantly when deployed on modern server architectures (e.g., current-generation Xeon or EPYC processors).
 
-## ⚠️ SECURITY NOTICE: Precompiled Binary Object (`parser_v3.o`)
+## SECURITY NOTICE: Precompiled Binary Object (`parser_v3.o`)
 
 This repository contains a precompiled object file (`src/precompiled/parser_v3.o`). In a security-critical context such as a Web Application Firewall, utilizing unverified binary blobs is a significant security risk and should never be done in production.
 
