@@ -17,5 +17,11 @@
       "time_unit": "ns",
       "bytes_per_second": 1532990.3841320672
     }
+  },
+  {
+    "timestamp": "2026-06-21T15:00:01+02:00",
+    "parity_percentage": "0",
+    "lumina_avg_cost_us": "0",
+    "modsec_avg_cost_us": "0"
   }
 ]
