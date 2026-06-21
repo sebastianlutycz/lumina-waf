@@ -4,7 +4,7 @@ set -e
 RATES=(1000 5000 10000 20000)
 PORTS=(8090 8081 8082)
 NAMES=("Baseline" "LuminaWAF" "ModSecurity")
-WRK="/home/sebastian/ideas/wrk2/wrk"
+WRK="/home/sebastian/workspace/wrk2/wrk"
 
 mkdir -p /home/sebastian/workspace/lumina-waf/tests/eval_suite/results
 OUT="/home/sebastian/workspace/lumina-waf/tests/eval_suite/results/wrk2_saturation.txt"
