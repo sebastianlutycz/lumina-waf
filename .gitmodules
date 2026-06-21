@@ -1,0 +1,3 @@
+[submodule "tests/eval_suite/coreruleset"]
+	path = tests/eval_suite/coreruleset
+	url = https://github.com/coreruleset/coreruleset.git
