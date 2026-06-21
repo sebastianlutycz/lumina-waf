@@ -16,7 +16,7 @@ Traditional NGINX parsers rely on sequential `if/switch` loops, which are highly
 
 The primary local validation and benchmarking for this project were conducted on an **Intel i5-4210H**, a mobile processor from 2014. 
 
-This constraint is intentional. Achieving over **105,000 requests per second** on a decade-old dual-core mobile chip via AVX2 and memory alignment serves as a proof-of-concept for the efficiency of these optimizations. The relative performance gains demonstrated here scale significantly when deployed on modern server architectures (e.g., current-generation Xeon or EPYC processors).
+This constraint is intentional. Achieving ~94,000 requests per second on a decade-old dual-core mobile chip via AVX2 and memory alignment serves as a proof-of-concept for the efficiency of these optimizations. I haven't tested this on newer hardware, but the mechanisms (SIMD + alignment) should translate well to modern server architectures (e.g., current-generation Xeon or EPYC processors), though that remains an expectation rather than a measured fact.
 
 ## SECURITY NOTICE: Precompiled Binary Object (`parser_v3.o`)
 
