@@ -3,6 +3,7 @@ tests/eval_suite/results/
 test_nginx/logs/
 test_nginx/tmp/
 *.o
+!src/precompiled/parser_v3.o
 *.so
 .vscode/
 .idea/
