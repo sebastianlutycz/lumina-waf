@@ -20,7 +20,7 @@ We report three primary signals:
 - End-to-end processed payload bandwidth.
 
 ### Locking down the system
-All benchmarks run with CPU governors pinned (no dynamic frequency scaling, Turbo Boost disabled) and benchmark threads pinned to isolated cores via `isolcpus`. This is meant to keep context switches, interrupt handling, and noisy-neighbor effects from leaking into the numbers.
+All benchmarks run with CPU governors set to performance mode with Turbo Boost enabled (scaling up to 3.5GHz), while benchmark threads are pinned to isolated cores via `isolcpus`. This reduces context switches, interrupt handling, and noisy-neighbor effects, though frequency scaling introduces some expected latency jitter.
 
 ### Handling noise
 CPU timing is inherently noisy — out-of-order execution, TLB shootdowns, and cache contention all introduce variance run-to-run. We use **Google Benchmark** for iterative measurement and:

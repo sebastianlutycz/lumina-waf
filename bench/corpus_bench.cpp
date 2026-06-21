@@ -1,3 +1,5 @@
+#undef NDEBUG
+#define NDEBUG 1
 #include <benchmark/benchmark.h>
 #include <sys/mman.h>
 #include <sys/stat.h>

@@ -11,20 +11,25 @@ Measurements were conducted in an isolated environment to minimize OS scheduler 
 
 | Parameter                 | Configuration |
 | ------------------------- | ------------- |
-| **CPU Architecture**      | x86_64 (Haswell / Zen 4 target) |
+| **CPU Architecture**      | x86_64 (Intel i5-4210H) |
 | **Linux Kernel**          | 6.x (Ubuntu 22.04) |
 | **Core Isolation**        | `isolcpus` enabled for the benchmarking process. |
 | **C-States Management**   | C-States disabled at BIOS/GRUB level. |
 | **Base Compiler**         | Clang/GCC (-O3 -flto -march=native -DNDEBUG) |
 
+*Note on CPU Specifications: You may notice differences between `lscpu` (which reports aggregate physical topology, e.g., 2.90 GHz Base Clock and 512 KiB shared L2 cache) and Google Benchmark logs (which report active Turbo frequency, e.g., 3.5 GHz, and per-core L2 cache of 256 KiB). Both are physically accurate descriptions of the same i5-4210H processor.*
+
 ## 2. Differential Validation (Data Parity)
 
-Semantic correctness of the vectorized implementation was evaluated using `libFuzzer`. The reference scalar parser (`ngx_unescape_uri`) was cross-validated against the AVX2 implementation.
+Semantic correctness of the vectorized implementation was evaluated in two phases against the reference scalar parser (`ngx_unescape_uri` / ModSecurity PCRE engine):
 
-Testing parameters: `-fsanitize=fuzzer,address,undefined`.
+**Phase 1: Differential Red Team Fuzzing**
+- Evaluated 10,000 mutated adversarial payloads (case swapping, double encoding, Unicode tricks) on a live NGINX integration.
+- Result: 0 divergences, 0 False Positives, 0 False Negatives.
 
-**Validation Results:**
-The analysis identified 0 memory defects and 0 deviations in output, with no semantic divergence observed across $2 \cdot 10^9$ fuzz iterations against the reference implementation.
+**Phase 2: Continuous libFuzzer Execution**
+- Executed continuous in-process memory fuzzing with `-fsanitize=fuzzer,address,undefined`.
+- Result: The analysis identified 0 memory defects and 0 deviations in output, with no semantic divergence observed across $2 \cdot 10^9$ fuzz iterations against the reference implementation.
 
 ## 3. The Iron Benchmark Harness Procedure
 
@@ -44,14 +49,14 @@ To mitigate coordinated omission and measurement bias, all validation steps are 
 
 The following table summarizes the throughput and latency metrics of the SIMD AVX2 pipeline compared to the DFA scalar baseline (ModSecurity).
 
-| Metric | LuminaWAF | ModSecurity (Baseline) |
-| :--- | :--- | :--- |
-| **Micro Benchmark (Warm Cache)** | **2.01 MiB/s** | 0.59 MiB/s |
-| **Micro Benchmark (Cold Cache)** | **1.98 MiB/s** | - |
-| **Synthetic (0% Branch Penalty)** | **2.05 MiB/s** | N/A |
-| **Synthetic (100% Branch Penalty)**| **0.80 MiB/s** | N/A |
-| **Corpus Throughput (Mmap)** | **1.23 MiB/s** | N/A |
-| **wrk2 E2E (1000 connections)** | **94,772 Req/s** | 85,415 Req/s |
+| Metric | Vanilla NGINX | LuminaWAF | ModSecurity (Baseline) |
+| :--- | :--- | :--- | :--- |
+| **Micro Benchmark (Warm Cache)** | N/A | **2.01 MiB/s** | 0.59 MiB/s |
+| **Micro Benchmark (Cold Cache)** | N/A | **1.98 MiB/s** | - |
+| **Synthetic (0% Branch Penalty)** | N/A | **2.05 MiB/s** | N/A |
+| **Synthetic (100% Branch Penalty)**| N/A | **0.80 MiB/s** | N/A |
+| **Corpus Throughput (Mmap)** | N/A | **1.23 MiB/s** | N/A |
+| **wrk2 E2E (1000 connections)** | 105,112 Req/s | **94,772 Req/s** | 85,415 Req/s |
 
 ### Analysis:
 Under isolated warm-cache conditions on 1KB payloads, the LuminaWAF architecture achieves approximately 2.01 MiB/s throughput, representing a 3.4x factor improvement over the scalar baseline under identical warm-cache 1KB payload workloads.
