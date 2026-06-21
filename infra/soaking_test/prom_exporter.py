@@ -54,11 +54,14 @@ def main():
                     l_data = req_buffer[req_id]["lumina"]
                     m_data = req_buffer[req_id]["modsec"]
                     
-                    lumina_dec = l_data.get("decision")
-                    modsec_dec = m_data.get("decision")
+                    lumina_status = l_data.get("status")
+                    modsec_status = m_data.get("status")
                     
-                    if lumina_dec and modsec_dec:
-                        if lumina_dec == modsec_dec:
+                    if lumina_status and modsec_status:
+                        lumina_blocked = (int(lumina_status) == 403)
+                        modsec_blocked = (int(modsec_status) == 403)
+                        
+                        if lumina_blocked == modsec_blocked:
                             PARITY_AGREEMENT.inc()
                         else:
                             PARITY_DISAGREEMENT.inc()
