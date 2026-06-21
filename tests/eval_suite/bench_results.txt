@@ -1,0 +1,38 @@
+=====================================
+ LUEF: Hardware & Latency Benchmarks 
+=====================================
+[*] Benchmarking ModSecurity (Baseline)...
+Running 10s test @ http://localhost:8085/modsec/index.html?q=safe_payload_string_here
+  4 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    10.59ms   11.03ms 295.50ms   98.80%
+    Req/Sec     2.55k   362.24     4.33k    84.75%
+  101709 requests in 10.01s, 24.15MB read
+Requests/sec:  10164.63
+Transfer/sec:      2.41MB
+------------------------------
+Requests/sec: 10164.633503
+Latency p50:  9.408000 ms
+Latency p90:  12.090000 ms
+Latency p95:  13.619000 ms
+Latency p99:  28.123000 ms
+Latency p99.9: 187.280000 ms
+------------------------------
+
+[*] Benchmarking LuminaWAF...
+Running 10s test @ http://localhost:8085/index.html?q=safe_payload_string_here
+  4 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.78ms    2.41ms 104.11ms   99.08%
+    Req/Sec     9.38k     1.26k   16.86k    67.75%
+  373418 requests in 10.01s, 88.67MB read
+Requests/sec:  37319.52
+Transfer/sec:      8.86MB
+------------------------------
+Requests/sec: 37319.523976
+Latency p50:  2.584000 ms
+Latency p90:  3.260000 ms
+Latency p95:  3.425000 ms
+Latency p99:  4.950000 ms
+Latency p99.9: 46.924000 ms
+------------------------------

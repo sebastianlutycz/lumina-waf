@@ -1,0 +1,6 @@
+logfile: /home/sebastian/workspace/lumina-waf/test_nginx/logs/error.log
+logmarkerheadername: X-FTW-Marker
+testoverride:
+  default:
+    dest_addr: "127.0.0.1"
+    port: 8085

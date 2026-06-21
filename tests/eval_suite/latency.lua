@@ -1,0 +1,10 @@
+done = function(summary, latency, requests)
+   io.write("------------------------------\n")
+   io.write(string.format("Requests/sec: %f\n", summary.requests / (summary.duration / 1000000)))
+   io.write(string.format("Latency p50:  %f ms\n", latency:percentile(50) / 1000))
+   io.write(string.format("Latency p90:  %f ms\n", latency:percentile(90) / 1000))
+   io.write(string.format("Latency p95:  %f ms\n", latency:percentile(95) / 1000))
+   io.write(string.format("Latency p99:  %f ms\n", latency:percentile(99) / 1000))
+   io.write(string.format("Latency p99.9: %f ms\n", latency:percentile(99.9) / 1000))
+   io.write("------------------------------\n")
+end

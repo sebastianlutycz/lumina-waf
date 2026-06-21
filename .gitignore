@@ -1,0 +1,17 @@
+build/
+tests/eval_suite/results/
+test_nginx/logs/
+test_nginx/tmp/
+*.o
+*.so
+.vscode/
+.idea/
+.DS_Store
+
+# Private Operational Infrastructure
+infra/
+run_all_benchmarks.sh
+benchmark_results.json
+final_reports/LuminaWAF_Iron_Report_20260621_11*
+final_reports/LuminaWAF_Iron_Report_20260621_12*
+parser_input.bc

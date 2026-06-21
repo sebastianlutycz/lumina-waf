@@ -1,0 +1,68 @@
+services:
+  # The NGINX instance handling traffic duplication (Shadow Mode)
+  nginx_router:
+    image: nginx:alpine
+    volumes:
+      - ./nginx_shadow.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - lumina_waf
+      - modsec_waf
+    networks:
+      - soaking_net
+
+  # The LuminaWAF endpoint
+  lumina_waf:
+    build:
+      context: ../../
+      dockerfile: infra/soaking_test/Dockerfile
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - soaking_net
+
+  # Python Prometheus Exporter (tails NGINX access log)
+  shadow_exporter:
+    image: python:3.9-slim
+    command: >
+      bash -c "pip install prometheus_client && python3 /scripts/prom_exporter.py"
+    volumes:
+      - ./prom_exporter.py:/scripts/prom_exporter.py:ro
+    volumes_from:
+      - nginx_router
+    ports:
+      - "8000:8000"
+    depends_on:
+      - nginx_router
+    networks:
+      - soaking_net
+
+  # The ModSecurity baseline endpoint
+  modsec_waf:
+    image: owasp/modsecurity-crs:nginx
+    environment:
+      - PARANOIA=1
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - soaking_net
+
+  # Traffic Generator: k6
+  k6_load_generator:
+    image: grafana/k6:latest
+    volumes:
+      - ./k6_traffic.js:/scripts/k6_traffic.js:ro
+    command: ["run", "/scripts/k6_traffic.js"]
+    depends_on:
+      - nginx_router
+    networks:
+      - soaking_net
+
+
+
+networks:
+  soaking_net:
+    driver: bridge

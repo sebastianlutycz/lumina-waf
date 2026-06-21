@@ -1,0 +1,21 @@
+[
+  {
+    "commit": "dev",
+    "date": "2026-06-21T10:28:47+02:00",
+    "benchmark": {
+      "name": "BM_LuminaWAF_WarmCache/1024/repeats:10",
+      "family_index": 0,
+      "per_family_instance_index": 0,
+      "run_name": "BM_LuminaWAF_WarmCache/1024/repeats:10",
+      "run_type": "iteration",
+      "repetitions": 10,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 1011,
+      "real_time": 685299.8813009948,
+      "cpu_time": 684935.803165183,
+      "time_unit": "ns",
+      "bytes_per_second": 1532990.3841320672
+    }
+  }
+]

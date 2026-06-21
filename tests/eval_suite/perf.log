@@ -1,0 +1,16 @@
+# started on Sat Jun 20 21:59:29 2026
+
+
+ Performance counter stats for './micro_bench --benchmark_format=json --benchmark_out=/home/sebastian/workspace/lumina-waf/tests/eval_suite/results.json':
+
+      178153892243      instructions                     #    2.61  insn per cycle            
+       68316063192      cycles                                                                
+          75369634      branch-misses                                                         
+         275677563      L1-dcache-load-misses                                                 
+
+      20.269634897 seconds time elapsed
+
+      19.887759000 seconds user
+       0.249753000 seconds sys
+
+

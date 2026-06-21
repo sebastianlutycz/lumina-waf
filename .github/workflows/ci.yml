@@ -1,0 +1,55 @@
+name: LuminaWAF CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang llvm libbenchmark-dev build-essential ninja-build
+        # Mock libmodsecurity3 for CI parity checking
+        sudo apt-get install -y libmodsecurity-dev
+
+    - name: Build LuminaWAF and LuminaC
+      run: |
+        make build
+
+    - name: Parity Audit (Fuzzer)
+      run: |
+        # Run 1,000,000 fuzzing mutations against baseline PCRE ModSecurity
+        ./build/parity_test -runs=1000000
+      
+    - name: Microarchitecture Evaluation (PMU)
+      run: |
+        # Execute microbenchmarks to verify latency has not regressed
+        ./build/micro_bench --benchmark_format=console
+        
+    - name: Generate Perf Report
+      run: |
+        ./build/micro_bench --benchmark_format=json > benchmark_results.json
+        echo "Performance report generated successfully."
+        
+    - name: CI/CD Micro-performance Regression Check
+      run: |
+        python3 tools/check_regression.py benchmark_results.json
+        
+    - name: Commit history and update pages
+      run: |
+        git config --global user.name 'LuminaCI Bot'
+        git config --global user.email 'bot@lumina-ci.local'
+        git add docs/history.json
+        git commit -m "chore: update benchmark history [skip ci]" || echo "No changes"
+        git push || echo "Push failed or not authenticated"
