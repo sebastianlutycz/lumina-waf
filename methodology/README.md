@@ -19,8 +19,13 @@ We report three primary signals:
 - IPC (instructions retired per cycle), measured at the function boundary.
 - End-to-end processed payload bandwidth.
 
-### Locking down the system
-All benchmarks run with CPU governors set to performance mode with Turbo Boost enabled (scaling up to 3.5GHz), while benchmark threads are pinned to isolated cores via `isolcpus`. This reduces context switches, interrupt handling, and noisy-neighbor effects, though frequency scaling introduces some expected latency jitter.
+### Real-World Homelab Environment
+Unlike clean-room environments, these benchmarks were run on an active homelab under normal operating pressure. This means:
+1. **Background Load**: A baseline load average (~2.0) and swap usage were present during measurements.
+2. **Dynamic Scaling**: CPU governors were set to performance mode with Turbo Boost enabled (scaling up to 3.5GHz) rather than static frequency pinning.
+3. **Core Isolation**: Benchmark threads were pinned to isolated cores via `isolcpus` to minimize direct context switching, though shared resources (like memory controllers) still experience homelab contention.
+
+This approach trades theoretical peak isolation for realistic deployment jitter.
 
 ### Handling noise
 CPU timing is inherently noisy — out-of-order execution, TLB shootdowns, and cache contention all introduce variance run-to-run. We use **Google Benchmark** for iterative measurement and:

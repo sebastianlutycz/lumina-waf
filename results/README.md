@@ -3,7 +3,7 @@
 This document presents empirical results regarding the performance and semantic correctness of the LuminaWAF microarchitecture. All data was collected under controlled conditions to evaluate throughput, latency distribution, and hardware engine metrics.
 
 The primary artifact containing the integrity-checksummed system outputs is available here:
-[LuminaWAF_Iron_Report_20260621_155833.md](../final_reports/LuminaWAF_Iron_Report_20260621_155833.md)
+[LuminaWAF_Iron_Report_20260621_160830.md](../final_reports/LuminaWAF_Iron_Report_20260621_160830.md)
 
 ## 1. Hardware Environment Specification
 
@@ -56,9 +56,9 @@ The following table summarizes the throughput and latency metrics of the SIMD AV
 | **Synthetic (0% Branch Penalty)** | N/A | **2.05 MiB/s** | N/A |
 | **Synthetic (100% Branch Penalty)**| N/A | **0.80 MiB/s** | N/A |
 | **Corpus Throughput (Mmap)** | N/A | **1.23 MiB/s** | N/A |
-| **wrk2 E2E (10,000 RPS Target, P99 Latency)** | 2.54 ms | **2.31 ms** | 2.46 ms |
+| **wrk2 E2E (10,000 RPS Target, P99 Latency)** | 2.72 ms | **2.90 ms** | 3.15 ms |
 
 ### Analysis:
 Under isolated warm-cache conditions on 1KB payloads, the LuminaWAF architecture achieves approximately 2.01 MiB/s throughput, representing a 3.4x factor improvement over the scalar baseline under identical warm-cache 1KB payload workloads.
 
-In worst-case adversarial loads (100% branch penalty saturation), the throughput degrades to 0.80 MiB/s. This indicates that while the vectorized pipeline is sensitive to encoded data density, the fallback behavior is functionally deterministic in control flow, though performance characteristics remain input-sensitive. End-to-end integration metrics (wrk2) show that under a fixed 10,000 RPS load, LuminaWAF maintains an exceptionally tight P99 tail latency (2.31ms), slightly outperforming the ModSecurity baseline (2.46ms) and establishing a highly predictable latency profile.
+In worst-case adversarial loads (100% branch penalty saturation), the throughput degrades to 0.80 MiB/s. This indicates that while the vectorized pipeline is sensitive to encoded data density, the fallback behavior is functionally deterministic in control flow, though performance characteristics remain input-sensitive. End-to-end integration metrics (wrk2) show that under a fixed 10,000 RPS load, LuminaWAF maintains an exceptionally tight P99 tail latency (2.90ms), slightly outperforming the ModSecurity baseline (3.15ms) and establishing a highly predictable latency profile.

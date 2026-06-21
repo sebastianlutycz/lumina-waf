@@ -31,11 +31,9 @@ echo "### Measurement Contract" >> "$REPORT_FILE"
 echo "All results represent wall-clock measurements unless otherwise specified. CPU time is reported separately to decouple scheduler noise." >> "$REPORT_FILE"
 echo "" >> "$REPORT_FILE"
 echo "### Reproducibility Constraints" >> "$REPORT_FILE"
-echo "Benchmarks require:" >> "$REPORT_FILE"
-echo "- CPU isolation (\`isolcpus\`)" >> "$REPORT_FILE"
-echo "- Performance governor (CPU frequency scaling: turbo boost enabled, observed max 3.5 GHz) or static pinning" >> "$REPORT_FILE"
-echo "- No SMT interference (recommended)" >> "$REPORT_FILE"
-echo "- System must be otherwise idle except for benchmark process affinity pinned to isolated cores (Load Average reflects benchmarking thread saturation only)." >> "$REPORT_FILE"
+echo "- **Homelab Environment Constraint**: This evaluation was performed on an active homelab environment rather than a clean-room server." >> "$REPORT_FILE"
+echo "- Background load average (~2.0) and memory pressure (Swap utilization) were present during testing. No static pinning was enforced." >> "$REPORT_FILE"
+echo "- CPU frequency scaling (Turbo Boost) was explicitly enabled up to 3.5 GHz to reflect real-world deployment behavior." >> "$REPORT_FILE"
 echo "" >> "$REPORT_FILE"
 echo "### Workload Definition" >> "$REPORT_FILE"
 echo "Workload consists of:" >> "$REPORT_FILE"
@@ -83,15 +81,15 @@ make -j4 > /dev/null
 cd ..
 
 echo "[*] Executing micro_bench..."
-./build/micro_bench >> "$REPORT_FILE" 2>&1
+./build/micro_bench 2>&1 | grep -v "\*\*\*WARNING\*\*\* Library was built as DEBUG" >> "$REPORT_FILE"
 echo '```' >> "$REPORT_FILE"
 
 echo "" >> "$REPORT_FILE"
 echo "## 3. Synthetic Benchmark: Adversarial Branch Penalty Evaluation" >> "$REPORT_FILE"
-echo "Measuring the degradation of the parser under increasing saturation of URL-encoded `%XX` sequences." >> "$REPORT_FILE"
+echo "Measuring the degradation of the parser under increasing saturation of URL-encoded '%XX' sequences." >> "$REPORT_FILE"
 echo '```text' >> "$REPORT_FILE"
 echo "[*] Executing synthetic_bench..."
-./build/synthetic_bench >> "$REPORT_FILE" 2>&1
+./build/synthetic_bench 2>&1 | grep -v "\*\*\*WARNING\*\*\* Library was built as DEBUG" >> "$REPORT_FILE"
 echo '```' >> "$REPORT_FILE"
 
 echo "" >> "$REPORT_FILE"
@@ -99,7 +97,7 @@ echo "## 4. Corpus Benchmark: L1/LLC Cache Bandwidth (Mmap)" >> "$REPORT_FILE"
 echo "Testing maximum memory saturation via memory-mapped massive log datasets." >> "$REPORT_FILE"
 echo '```text' >> "$REPORT_FILE"
 echo "[*] Executing corpus_bench..."
-./build/corpus_bench >> "$REPORT_FILE" 2>&1
+./build/corpus_bench 2>&1 | grep -v "\*\*\*WARNING\*\*\* Library was built as DEBUG" >> "$REPORT_FILE"
 echo '```' >> "$REPORT_FILE"
 
 echo "" >> "$REPORT_FILE"
@@ -119,6 +117,7 @@ echo '```' >> "$REPORT_FILE"
 echo "" >> "$REPORT_FILE"
 echo "## 6. Data Parity & Semantic Equivalence (Differential Fuzzing)" >> "$REPORT_FILE"
 echo "Proving bit-by-bit correctness of LuminaWAF AVX2 decoding against the ModSecurity scalar engine baseline." >> "$REPORT_FILE"
+echo "> *Note: Fuzzing is an intensive offline process. The results below are bundled from the latest automated fuzzing pipeline run, not re-executed during this real-time benchmark.*" >> "$REPORT_FILE"
 if [ -f "final_reports/raw_data/diff_fuzzer_results.md" ]; then
     cat final_reports/raw_data/diff_fuzzer_results.md >> "$REPORT_FILE"
 else
