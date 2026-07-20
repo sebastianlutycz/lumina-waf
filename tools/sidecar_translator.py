@@ -53,7 +53,7 @@ from regex_dfa import (UnsupportedRegex as DfaUnsupportedRegex,
                        compile_mandatory_seed_cover,
                        compile_seeded_fast_accept_branches, compile_dfa_ast,
                        emit_dfa_c, emit_bitset_nfa_c, inline_flag_enabled,
-                       parse_regex_ast, requires_dfa)
+                       parse_regex_ast, reparser, requires_dfa)
 
 
 _GENERATED_CONST_ARRAY_RE = re.compile(
@@ -669,10 +669,6 @@ def parse_statement(kind, full, quotes, file_prefix):
 # Regex AST -> branchless C (reused/extended from legacy compiler)
 # ---------------------------------------------------------------------------
 import re as _re
-try:
-    import re._parser as reparser
-except Exception:
-    reparser = None
 
 def build_bitmask_for_in(in_nodes, ignore_case):
     mask = [0, 0, 0, 0]
