@@ -9,7 +9,11 @@ only compact DFA transitions.
 from collections import deque
 from dataclasses import dataclass, field
 import re
-import re._parser as reparser
+
+try:
+    from re import _parser as reparser
+except ImportError:  # Python 3.10 exposes the same parser through sre_parse.
+    import sre_parse as reparser
 
 
 ALL_BYTES = (1 << 256) - 1
