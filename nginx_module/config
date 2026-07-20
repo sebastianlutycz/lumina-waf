@@ -1,0 +1,15 @@
+ngx_addon_name=ngx_http_luminawaf_module
+
+if test -n "$ngx_module_link"; then
+    ngx_module_type=HTTP
+    ngx_module_name=ngx_http_luminawaf_module
+    ngx_module_srcs="$ngx_addon_dir/ngx_http_luminawaf_module.c"
+    ngx_module_libs="-L$ngx_addon_dir/../build -lluminawaf -Wl,-rpath,$ngx_addon_dir/../build"
+    CORE_INCS="$CORE_INCS $ngx_addon_dir/../src"
+    . auto/module
+else
+    HTTP_MODULES="$HTTP_MODULES ngx_http_luminawaf_module"
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_http_luminawaf_module.c"
+    CORE_LIBS="$CORE_LIBS -L$ngx_addon_dir/../build -lluminawaf -Wl,-rpath,$ngx_addon_dir/../build"
+    CORE_INCS="$CORE_INCS $ngx_addon_dir/../src"
+fi

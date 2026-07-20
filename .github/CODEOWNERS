@@ -1,0 +1,15 @@
+# Default code owner for the repository.
+* @sebastianlutycz
+
+# Release, evidence, and architecture-sensitive areas.
+/.github/ @sebastianlutycz
+/bench/benchmark_harness/ @sebastianlutycz
+/clean_room/ @sebastianlutycz
+/methodology/ @sebastianlutycz
+/nginx_module/ @sebastianlutycz
+/src/ @sebastianlutycz
+/tools/ @sebastianlutycz
+/CMakeLists.txt @sebastianlutycz
+/INTEGRITY.md @sebastianlutycz
+/LICENSE @sebastianlutycz
+/SECURITY.md @sebastianlutycz

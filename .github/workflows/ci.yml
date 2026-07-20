@@ -1,0 +1,42 @@
+name: LuminaWAF CI
+
+on:
+  push:
+    branches: ["main", "develop", "release/0.4.x"]
+  pull_request:
+    branches: ["main", "develop", "release/0.4.x"]
+
+jobs:
+  source-build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout source and pinned CRS input
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake libbenchmark-dev libmodsecurity-dev python3-yaml
+
+      - name: Verify distributable tree
+        run: python3 tools/verify_release_tree.py --root .
+
+      - name: Materialize user-supplied rules
+        run: ./bench/benchmark_harness/materialize_runtime.sh
+
+      - name: Build release targets
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2 --target luminawaf synthetic_bench corpus_bench
+
+      - name: Run source and unit gates
+        run: |
+          python3 -m unittest discover -s tests/unit -p 'test_*.py'
+          tools/verify_lumina_markers.py --source-root . --binary build/libluminawaf.so
+          python3 tools/verify_release_tree.py --root .
+
+      - name: Verify source formatting
+        run: git diff --check

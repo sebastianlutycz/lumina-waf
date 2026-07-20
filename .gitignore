@@ -1,0 +1,113 @@
+build/
+build_*/
+tests/eval_suite/results/
+test_nginx/logs/
+test_nginx/tmp/
+test_nginx/html/
+*.o
+*.so
+.vscode/
+.idea/
+.DS_Store
+
+# Private Operational Infrastructure
+infra/
+run_all_benchmarks.sh
+benchmark_results.json
+final_reports/
+parser_input.bc
+
+# Profiling and logs
+perf.data*
+perf_results/
+results/
+audit_err.log
+*.log
+*.svg
+*.tar.gz
+trace*.log
+out.log
+
+# Generated Code and Rules (BYOR compliance)
+src/generated/
+src/generated_pl2/
+src.bak/
+src/parser_input.c
+src/parser_rules_*.c
+src/crs_tx_rules.c
+tests/eval_suite/coreruleset/
+tests/eval_suite/full_crs.conf
+tests/eval_suite/*.data
+build/
+
+# Internal documentation and planning (never part of a release tree)
+IMPORTANT.md
+CHANGELOG*.md
+/CHeatcodes.md
+/LuminaWAF_Mechanisms.md
+/PLAN_*.md
+/sprint_*.md
+/task_*.md
+
+# Historical Iron Benchmark artifacts (measured, not source)
+BENCHMARK_RESULTS.md
+bench/iron_benchmark/
+bench/iron_benchmark/iron_dataset_mixed.jsonl
+bench/iron_benchmark/*.jsonl
+bench/iron_benchmark/parity_audit_sequential.cpp
+bench/iron_benchmark/iron_bench_core.cpp
+bench/iron_benchmark/iron_harness_v8.sh
+bench/iron_benchmark/iron_diff_v8.py
+
+# Local benchmark bootstrap and result artifacts
+.cache/ultimate_v10/
+.cache/benchmark_harness_v1/
+perf_results/ultimate_v10/
+
+# Internal working-tree hygiene (never tracked)
+build_profile/
+build_off/
+build_bugfix/
+build2/
+.bak_*/
+flamegraphs/
+test_nginx/
+src/precompiled/*.o
+scripts/*.bak
+*.bak.*
+CMakeLists.txt.bak.*
+
+# BYOR input ruleset (user-provided, not project source)
+coreruleset/
+
+# Source/test artifacts that are large or regenerated
+src/gzip_bomb_payload.h
+tests/eval_suite/crs_parity_report.txt
+tests/eval_suite/dataset_attacks_capped.txt
+tests/eval_suite/dataset_1m*.txt
+
+# Backup/swap files and python caches
+*.bak
+*.bak_*
+*.bak/
+parser_rules_bak_*/
+src.bak/
+__pycache__/
+*.pyc
+*.orig
+*.rej
+*.old
+
+# Local diagnostic programs and rejected one-off harnesses
+/scratch/
+/test_943
+/test_generated
+/test_generated_upper
+/test_decode
+/test_scan
+/tests/debug_c
+/tests/debug_c2
+/tests/eval_suite/ftw
+/BENCHMARK_RESULTS_OFF.md
+/BENCHMARK_RESULTS_ON.md
+/out_regex.txt

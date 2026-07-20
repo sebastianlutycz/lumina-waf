@@ -1,0 +1,612 @@
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+manifest_module = load_module(
+    "harness_manifest", ROOT / "bench/benchmark_harness/manifest.py"
+)
+e2e_module = load_module("harness_e2e", ROOT / "bench/benchmark_harness/e2e.py")
+report_module = load_module("harness_report", ROOT / "bench/benchmark_harness/report.py")
+run_module = load_module("harness_run", ROOT / "bench/benchmark_harness/run.py")
+coraza_module = load_module(
+    "harness_coraza_correctness",
+    ROOT / "bench/benchmark_harness/coraza_correctness.py",
+)
+workload_codegen_module = load_module(
+    "harness_workload_codegen",
+    ROOT / "bench/benchmark_harness/generate_workload_header.py",
+)
+reference_config_module = load_module(
+    "harness_reference_config",
+    ROOT / "bench/benchmark_harness/generate_reference_config.py",
+)
+setup_module = load_module(
+    "harness_crs_setup",
+    ROOT / "bench/benchmark_harness/generate_crs_setup.py",
+)
+
+
+class BenchmarkHarnessTest(unittest.TestCase):
+    def materialize_real_reference_config(self, directory: Path) -> Path:
+        setup = directory / "crs-setup.conf"
+        setup.write_text(
+            setup_module.render(
+                ROOT / "tests/eval_suite/coreruleset/crs-setup.conf.example"
+            ),
+            encoding="utf-8",
+        )
+        config = directory / "modsecurity_crs_pl2.conf"
+        config.write_text(
+            reference_config_module.render(
+                ROOT / "tests/eval_suite/modsec_crs_pl2.conf",
+                ROOT / "tests/eval_suite/coreruleset",
+                setup,
+            ),
+            encoding="utf-8",
+        )
+        return config
+
+    def test_repository_launcher_fails_fast_when_auto_bootstrap_is_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = os.environ.copy()
+            environment.update({
+                "LUMINA_BENCH_V1_CACHE": directory,
+                "LUMINA_BENCH_V1_AUTO_BOOTSTRAP": "0",
+            })
+            process = subprocess.run(
+                [str(ROOT / "bench/benchmark_harness/run.sh"), "--help"],
+                cwd=ROOT, env=environment, capture_output=True, text=True,
+            )
+            self.assertEqual(process.returncode, 2)
+            self.assertIn("Benchmark Harness v1 cache is incomplete", process.stderr)
+            self.assertIn("bootstrap.sh", process.stderr)
+
+    def test_repository_launcher_refreshes_runtime_before_run(self):
+        launcher = (ROOT / "bench/benchmark_harness/run.sh").read_text(encoding="utf-8")
+        bootstrap = (ROOT / "bench/benchmark_harness/bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"$SCRIPT_DIR/prepare_runtime.sh" --check-cache', launcher)
+        self.assertIn('"$SCRIPT_DIR/materialize_runtime.sh"', launcher)
+        self.assertIn(
+            '"$SCRIPT_DIR/materialize_runtime.sh"\n'
+            'LUMINA_BENCH_V1_CACHE="$CACHE" "$SCRIPT_DIR/prepare_runtime.sh"',
+            launcher,
+        )
+        self.assertIn('source "$CACHE/env.sh"', launcher)
+        self.assertIn('"$HERE/prepare_runtime.sh"', bootstrap)
+        self.assertIn('"$HERE/materialize_runtime.sh"', bootstrap)
+        self.assertIn("LUMINA_BENCH_V1_WRK", launcher + bootstrap + (
+            ROOT / "bench/benchmark_harness/prepare_runtime.sh"
+        ).read_text(encoding="utf-8"))
+
+    def test_nginx_runtime_prefix_is_materialized_from_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory) / "test_nginx"
+            e2e_module.prepare_prefix(prefix)
+            self.assertEqual((prefix / "html/about").read_bytes(), b"OK")
+            for relative in ("logs", "tmp/client_body", "tmp/proxy", "html"):
+                self.assertTrue((prefix / relative).is_dir())
+
+    def test_reference_config_rewrites_host_specific_crs_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            crs = root / "crs"
+            (crs / "rules").mkdir(parents=True)
+            (crs / "crs-setup.conf").write_text("setup\n", encoding="utf-8")
+            rule = crs / "rules/REQUEST-901.conf"
+            rule.write_text("rule\n", encoding="utf-8")
+            template = root / "template.conf"
+            template.write_text(
+                "SecRuleEngine On\n"
+                "Include /old/checkout/tests/eval_suite/coreruleset/crs-setup.conf\n"
+                "Include /old/checkout/tests/eval_suite/coreruleset/rules/REQUEST-901.conf\n",
+                encoding="utf-8",
+            )
+            rendered = reference_config_module.render(template, crs)
+            self.assertIn(f"Include {(crs / 'crs-setup.conf').resolve()}", rendered)
+            self.assertIn(f"Include {rule.resolve()}", rendered)
+            self.assertNotIn("/old/checkout", rendered)
+
+    def test_reference_config_renders_repository_relative_includes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            crs = root / "crs"
+            crs.mkdir()
+            setup = crs / "crs-setup.conf"
+            setup.write_text("setup\n", encoding="utf-8")
+            template = root / "template.conf"
+            template.write_text(
+                "SecRuleEngine On\nInclude coreruleset/crs-setup.conf\n",
+                encoding="utf-8",
+            )
+            rendered = reference_config_module.render(template, crs)
+            self.assertIn(f"Include {setup.resolve()}", rendered)
+
+    def test_crs_setup_is_materialized_from_downloaded_example(self):
+        rendered = setup_module.render(
+            ROOT / "tests/eval_suite/coreruleset/crs-setup.conf.example"
+        )
+        self.assertIn("setvar:tx.blocking_paranoia_level=2", rendered)
+        self.assertIn("setvar:tx.detection_paranoia_level=2", rendered)
+        self.assertIn('SecDefaultAction "phase:1,nolog,pass"', rendered)
+
+    def test_overhead_adapter_set_has_balanced_three_layers(self):
+        with mock.patch.dict("os.environ", {
+            "LUMINA_BENCH_V1_BASELINE_NGINX_CONFIG": "/tmp/e0.conf",
+            "LUMINA_BENCH_V1_LUMINA_OFF_NGINX_CONFIG": "/tmp/e1.conf",
+            "LUMINA_BENCH_V1_LUMINA_NGINX_CONFIG": "/tmp/e2.conf",
+        }):
+            values = e2e_module.adapters(False, "overhead")
+        self.assertEqual(
+            [item.name for item in values],
+            ["baseline", "luminawaf-loaded-off", "luminawaf"],
+        )
+        self.assertEqual(
+            [item.name for item in e2e_module.rotated_order(values, 1)],
+            ["luminawaf-loaded-off", "luminawaf", "baseline"],
+        )
+
+    def test_lumina_off_and_on_configs_share_normalized_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            off = Path(directory) / "off.conf"
+            on = Path(directory) / "on.conf"
+            off.write_text(
+                "pid /tmp/off.pid;\nserver { listen 19090; lumina_waf off; }\n",
+                encoding="utf-8",
+            )
+            on.write_text(
+                "pid /tmp/on.pid;\nserver { listen 19091; lumina_waf on; }\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                e2e_module.normalized_config_sha256(off),
+                e2e_module.normalized_config_sha256(on),
+            )
+
+    def test_overhead_pairing_rejects_config_mismatch(self):
+        results = []
+        for engine, cpu in (
+            ("baseline", 100.0), ("luminawaf-loaded-off", 110.0),
+            ("luminawaf", 260.0),
+        ):
+            results.append({
+                "engine": engine, "repetition": 0, "connections": 10,
+                "round_id": "overhead-r00-c10", "workload_sha256": "workload",
+                "normalized_config_sha256": "lumina" if engine != "baseline" else "base",
+                "server_cpu_ns_per_request": cpu, "valid": True,
+            })
+        rows, errors = report_module.overhead_paired_rows({
+            "canonical_requested": False, "results": results,
+        })
+        self.assertFalse(errors)
+        self.assertEqual(
+            next(row for row in rows if row["metric"] == "module_hook")["value_ns"], 10.0
+        )
+        self.assertEqual(
+            next(row for row in rows if row["metric"] == "adapter_plus_pl2")["value_ns"],
+            150.0,
+        )
+        results[-1]["normalized_config_sha256"] = "different"
+        rows, errors = report_module.overhead_paired_rows({"results": results})
+        self.assertFalse(rows)
+        self.assertTrue(any("config identity" in error for error in errors))
+
+    def test_generated_direct_workload_uses_all_six_allow_requests(self):
+        workload = ROOT / "bench/benchmark_harness/workloads/requests.json"
+        rendered = workload_codegen_module.render(workload)
+        self.assertEqual(rendered.count("inline constexpr Header kHeaders"), 6)
+        self.assertIn("allow_static_asset", rendered)
+        self.assertIn("kWorkloadSha256", rendered)
+
+    def test_real_crs_manifest_passes_strict_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            payload = manifest_module.build_manifest(
+                ROOT / "tests/eval_suite/coreruleset",
+                self.materialize_real_reference_config(Path(directory)),
+                True,
+            )
+        self.assertTrue(payload["canonical"])
+        self.assertEqual(payload["crs"]["policy"]["blocking_paranoia_level"], 2)
+        self.assertEqual(payload["crs"]["policy"]["detection_paranoia_level"], 2)
+        self.assertEqual(payload["crs"]["policy"]["inbound_anomaly_score_threshold"], 5)
+        self.assertGreater(payload["crs"]["inbound_pl2_rule_count"], 0)
+        self.assertIn(911100, payload["crs"]["inbound_pl2_rule_ids"])
+        self.assertGreater(payload["lumina"]["generated_rule_count"], 0)
+
+    def test_strict_manifest_rejects_untracked_crs_input(self):
+        original_git = manifest_module.git
+
+        def dirty_git(path: Path, *args: str):
+            if args == ("status", "--porcelain=v1", "--untracked-files=all"):
+                return "?? rules/local-override.conf"
+            return original_git(path, *args)
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.materialize_real_reference_config(Path(directory))
+            with mock.patch.object(manifest_module, "git", side_effect=dirty_git):
+                with self.assertRaisesRegex(ValueError, "untracked entries"):
+                    manifest_module.build_manifest(
+                        ROOT / "tests/eval_suite/coreruleset", config, True
+                    )
+
+    def test_wrk2_parser_preserves_p99_9_and_validity(self):
+        raw = """
+ 50.000%  843.00us
+ 90.000%    2.91ms
+ 99.000%    4.38ms
+ 99.900%    5.25ms
+ 100.000%    7.00ms
+  100001 requests in 10.00s
+Requests/sec: 10000.10
+"""
+        parsed = e2e_module.parse_wrk(raw, requested_rate=10_000, min_samples=100_000)
+        self.assertTrue(parsed["valid"])
+        self.assertEqual(parsed["latency_us"]["p99_9"], 5250.0)
+        self.assertEqual(parsed["latency_us"]["max"], 7000.0)
+        self.assertEqual(parsed["accepted_requests"], 100001)
+
+    def test_manifest_proves_coraza_and_modsecurity_include_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.materialize_real_reference_config(Path(directory))
+            payload = manifest_module.build_manifest(
+                ROOT / "tests/eval_suite/coreruleset", config, True,
+                coraza_config=config, require_coraza=True,
+            )
+        self.assertEqual(
+            payload["comparators"]["coraza"]["ordered_include_identity"],
+            payload["comparators"]["modsecurity"]["ordered_include_identity"],
+        )
+        self.assertEqual(payload["comparators"]["coraza"]["external_rule_overrides"], [])
+
+    def test_allow_workload_generates_multi_request_lua(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "workload.lua"
+            count = e2e_module.write_wrk_script(
+                ROOT / "bench/benchmark_harness/workloads/requests.json", output
+            )
+            self.assertGreaterEqual(count, 5)
+            self.assertIn("wrk.format", output.read_text(encoding="utf-8"))
+
+    def test_coraza_ftw_summary_rejects_outcome_overrides(self):
+        summary = coraza_module.normalize_ftw(
+            {"run": 4, "success": ["1", "2", "3"], "failed": ["4"],
+             "ignored": ["5"], "forced-pass": [], "forced-fail": []},
+            "manifest",
+        )
+        self.assertEqual(summary["overall_parity"], 75.0)
+        self.assertEqual(summary["outcome_overrides"], ["5"])
+
+    def test_coraza_ftw_summary_excludes_selection_skips_from_denominator(self):
+        summary = coraza_module.normalize_ftw(
+            {"run": 100, "success": [str(value) for value in range(90)],
+             "failed": ["failure"], "skipped": [str(value) for value in range(9)],
+             "ignored": [], "forced-pass": [], "forced-fail": []},
+            "manifest",
+        )
+        self.assertEqual(summary["tests"], 91)
+        self.assertEqual(summary["selection_skipped"], 9)
+        self.assertAlmostEqual(summary["overall_parity"], 100.0 * 90.0 / 91.0)
+
+    def test_wrk2_parser_rejects_insufficient_tail(self):
+        raw = """
+ 50.000%  1.00ms
+ 90.000%  2.00ms
+ 99.000%  3.00ms
+ 99.900%  4.00ms
+  99999 requests in 10.00s
+Requests/sec: 9999.90
+"""
+        parsed = e2e_module.parse_wrk(raw, requested_rate=10_000, min_samples=100_000)
+        self.assertFalse(parsed["valid"])
+        self.assertTrue(any("accepted samples" in reason for reason in parsed["invalid_reasons"]))
+
+    def test_report_is_derived_from_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = Path(directory)
+            manifest = manifest_module.build_manifest(
+                ROOT / "tests/eval_suite/coreruleset",
+                self.materialize_real_reference_config(result),
+                True,
+            )
+            (result / "crs_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (result / "run_manifest.json").write_text(
+                json.dumps({"mode": "smoke", "canonical": False,
+                            "validity_reason": "test"}), encoding="utf-8"
+            )
+            (result / "environment.json").write_text(
+                json.dumps({
+                    "host_profile": "shared-loaded-homelab",
+                    "host_note": "Background services remained active.",
+                    "kernel_isolated_cpus": "",
+                    "benchmark_cpu_sets": {"server": "1,3", "client": "0,2", "micro": "1"},
+                    "governor": "performance", "loadavg": "2.00 2.50 3.00 1/100 1",
+                    "pressure": {"cpu": "some avg10=1.00"}, "process_count": "100",
+                }), encoding="utf-8",
+            )
+            (result / "environment_end.json").write_text(
+                json.dumps({
+                    "loadavg": "3.00 2.50 2.00 1/110 2",
+                    "pressure": {"cpu": "some avg10=2.00"}, "process_count": "110",
+                }), encoding="utf-8",
+            )
+            (result / "correctness_lumina.log").write_text(
+                "elapsed: 1.0s tests=3986\ntransport_skipped=22\n"
+                "positive(block) : 98.33% (3117/3170)\n"
+                "positive(exact) : 99.72% (3161/3170)\n"
+                "negative(excl) : 99.88% (815/816)\n"
+                "timeouts=0 exceptions=0\nOVERALL PARITY : 99.75%\n",
+                encoding="utf-8",
+            )
+            (result / "correctness_lumina.json").write_text(
+                json.dumps({
+                    "oracle": "test oracle", "tests": 3986, "overall_parity": 99.75,
+                    "metrics": {
+                        "positive_block": {"matched": 3117, "total": 3170, "percent": 98.33},
+                        "positive_exact": {"matched": 3161, "total": 3170, "percent": 99.72},
+                        "negative_exclusion": {"matched": 815, "total": 816, "percent": 99.88},
+                    },
+                    "skips": {"transport": 22, "paranoia_level": 0, "configuration": 0},
+                    "timeouts": 0, "exceptions": 0, "failure_count": 10,
+                }),
+                encoding="utf-8",
+            )
+            (result / "micro.log").write_text("raw benchmark output\n", encoding="utf-8")
+            (result / "correctness_coraza.json").write_text(
+                json.dumps({"tests": 4009, "overall_parity": 99.825,
+                            "transport_skipped": 0, "failed": 7,
+                            "timeouts": 0, "exceptions": 0,
+                            "outcome_overrides": []}),
+                encoding="utf-8",
+            )
+            rendered = report_module.render(result)
+            self.assertIn("NON-CANONICAL", rendered)
+            self.assertIn(manifest["manifest_sha256"], rendered)
+            self.assertIn("Full CRS PL2 Correctness Gates", rendered)
+            self.assertIn("99.75%", rendered)
+            self.assertIn("HTTP verdict (rule IDs unavailable)", rendered)
+            self.assertIn("98.33% (3117/3170)", rendered)
+            self.assertIn("Generated Lumina execution units", rendered)
+            self.assertIn("Raw Google Benchmark Output", rendered)
+            self.assertIn("raw benchmark output", rendered)
+            self.assertIn("Host State Annotation", rendered)
+            self.assertIn("(../../../methodology/README.md)", rendered)
+            self.assertIn("shared-loaded-homelab", rendered)
+            self.assertIn("Background services remained active.", rendered)
+            self.assertIn("A host annotation documents contention", rendered)
+
+    def test_micro_qualification_requires_raw_repetitions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "micro.json"
+            benchmarks = []
+            for workload in ("Allow", "Attack"):
+                run_name = f"FullTransaction/LuminaWAF/{workload}/repeats:10"
+                benchmarks.extend({"run_name": run_name, "cpu_time": 10.0} for _ in range(10))
+                benchmarks.extend(
+                    {"run_name": run_name, "aggregate_name": aggregate, "cpu_time": 10.0}
+                    for aggregate in ("mean", "median", "stddev", "cv")
+                )
+            path.write_text(json.dumps({"benchmarks": benchmarks}), encoding="utf-8")
+            result = run_module.validate_micro_artifacts([path], ["LuminaWAF"], 1, 10)
+            self.assertTrue(result["valid"])
+            aggregate_only = [item for item in benchmarks if item.get("aggregate_name")]
+            path.write_text(json.dumps({"benchmarks": aggregate_only}), encoding="utf-8")
+            result = run_module.validate_micro_artifacts([path], ["LuminaWAF"], 1, 10)
+            self.assertFalse(result["valid"])
+            self.assertTrue(any("raw repetitions=0" in error for error in result["errors"]))
+
+    def test_luminawaf_must_not_contain_legacy_classifier_symbols(self):
+        clean = run_module.symbol_isolation_evidence(
+            "Symbol table '.dynsym' contains 10 entries",
+            "Relocation section '.rela.dyn'",
+            "0x0000000000000001 (NEEDED) Shared library: [libc.so.6]",
+        )
+        self.assertTrue(clean["valid"])
+        self.assertEqual(clean["dt_needed"], ["libc.so.6"])
+
+        exported = run_module.symbol_isolation_evidence(
+            "42: 000000000005f800 FUNC GLOBAL DEFAULT libinjection_sqli", "", ""
+        )
+        self.assertFalse(exported["valid"])
+        self.assertEqual(exported["legacy_libinjection_symbols"], ["libinjection_sqli"])
+
+        relocated = run_module.symbol_isolation_evidence(
+            "", "R_X86_64_JUMP_SLOT libinjection_sqli@Base + 0", ""
+        )
+        self.assertFalse(relocated["valid"])
+        self.assertEqual(
+            relocated["legacy_libinjection_relocations"], ["libinjection_sqli"]
+        )
+
+        linked = run_module.symbol_isolation_evidence(
+            "", "", "0x0000000000000001 (NEEDED) Shared library: [libpcre2-8.so.0]"
+        )
+        self.assertFalse(linked["valid"])
+        self.assertEqual(linked["forbidden_dt_needed"], ["libpcre2-8.so.0"])
+
+    def test_fixed_rate_qualification_requires_stable_rps(self):
+        results = []
+        for index, rate in enumerate((1000.0, 1001.0, 999.0, 1000.5, 999.5)):
+            results.append({
+                "engine": "luminawaf", "table": "crs", "valid": True,
+                "accepted_requests": 100_000, "requests_per_second": rate,
+                "latency_us": {"p50": 10.0, "p90": 20.0, "p99": 30.0, "p99_9": 40.0},
+                "repetition": index,
+            })
+        rows = report_module.fixed_rows({
+            "canonical_requested": True, "requested_rate": 1000, "results": results,
+        })
+        self.assertTrue(rows[0]["qualified"])
+        results[-1]["requests_per_second"] = 1500.0
+        rows = report_module.fixed_rows({
+            "canonical_requested": True, "requested_rate": 1000, "results": results,
+        })
+        self.assertFalse(rows[0]["qualified"])
+
+    def test_sampling_plan_uses_slowest_stable_engine(self):
+        saturation = {
+            "results": [
+                {"engine": "luminawaf"}, {"engine": "modsecurity"},
+                {"engine": "coraza"},
+            ],
+            "stability": [
+                {"engine": "luminawaf", "sustainable": True, "median_rps": 2500.0},
+                {"engine": "modsecurity", "sustainable": True, "median_rps": 300.0},
+                {"engine": "coraza", "sustainable": True, "median_rps": 170.0},
+            ],
+        }
+        plan = run_module.derive_sampling_plan(
+            saturation, target_samples=100_000, load_fraction=0.60
+        )
+        self.assertEqual(plan["limiting_engine"], "coraza")
+        self.assertEqual(plan["fixed_rate"], 102)
+        self.assertGreaterEqual(plan["projected_accepted_at_qualification_floor"], 100_000)
+
+    def test_sampling_plan_rejects_unsafe_overrides(self):
+        saturation = {
+            "results": [{"engine": "coraza"}],
+            "stability": [
+                {"engine": "coraza", "sustainable": True, "median_rps": 100.0}
+            ],
+        }
+        with self.assertRaises(RuntimeError):
+            run_module.derive_sampling_plan(
+                saturation, target_samples=100_000, load_fraction=0.60,
+                requested_rate=61,
+            )
+        with self.assertRaises(RuntimeError):
+            run_module.derive_sampling_plan(
+                saturation, target_samples=100_000, load_fraction=0.60,
+                requested_duration="10s",
+            )
+        with self.assertRaises(RuntimeError):
+            run_module.derive_sampling_plan(
+                saturation, target_samples=100_000, load_fraction=0.61,
+            )
+
+    def test_artifact_validation_rejects_post_measurement_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "binary.so"
+            path.write_bytes(b"release")
+            manifest = {"binary": run_module.artifact(path)}
+            self.assertTrue(run_module.validate_artifact_manifest(manifest)["valid"])
+            path.write_bytes(b"changed")
+            evidence = run_module.validate_artifact_manifest(manifest)
+            self.assertFalse(evidence["valid"])
+            self.assertIn("binary: SHA256 drift", evidence["errors"])
+
+    def test_build_provenance_retains_effective_commands(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build"
+            result = root / "result"
+            build.mkdir()
+            result.mkdir()
+            (build / "CMakeCache.txt").write_text(
+                "CMAKE_BUILD_TYPE:STRING=Release\n"
+                "CMAKE_C_COMPILER:FILEPATH=/usr/bin/cc\n"
+                "CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++\n",
+                encoding="utf-8",
+            )
+            (build / "compile_commands.json").write_text(
+                json.dumps([{"command": "cc -O3 -c unit.c", "file": "unit.c"}]),
+                encoding="utf-8",
+            )
+            path = run_module.capture_build_provenance(
+                build, result, ["cmake", "-S", "."], ["cmake", "--build", "build"]
+            )
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(evidence["build_type"], "Release")
+            self.assertEqual(evidence["effective_compile_commands"], 1)
+            self.assertTrue((result / "CMakeCache.txt").is_file())
+            self.assertTrue((result / "compile_commands.json").is_file())
+
+    def test_micro_rows_expose_inner_cv_without_fake_process_ci(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "micro.json"
+            name = "FullTransaction/LuminaWAF/Allow/repeats:10"
+            path.write_text(json.dumps({"benchmarks": [
+                {"run_name": name, "aggregate_name": "median", "cpu_time": 100.0},
+                {"run_name": name, "aggregate_name": "cv", "cpu_time": 0.025},
+            ]}), encoding="utf-8")
+            rows = report_module.micro_rows([path])
+            self.assertEqual(rows[0]["inner_cv"], 2.5)
+            self.assertIsNone(rows[0]["ci"])
+
+    def test_pmu_rows_preserve_core_metrics_and_partial_unavailability(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pmu_luminawaf.csv"
+            path.write_text(
+                "1000,,cycles,100,100.00,,\n"
+                "2000,,instructions,100,100.00,,\n"
+                "500,,branches,100,100.00,,\n"
+                "25,,branch-misses,100,100.00,,\n"
+                "400,,L1-dcache-loads,80,80.00,,\n"
+                "20,,L1-dcache-load-misses,80,80.00,,\n"
+                "<not supported>,,LLC-loads,0,100.00,,\n"
+                "<not supported>,,LLC-load-misses,0,100.00,,\n",
+                encoding="utf-8",
+            )
+            (Path(directory) / "pmu_luminawaf_group_00.log").write_text(
+                "FullTransaction/LuminaWAF/Allow/repeats:10  100 ns  100 ns  5 bytes=x\n"
+                "FullTransaction/LuminaWAF/Allow/repeats:10  100 ns  100 ns  5 bytes=x\n",
+                encoding="utf-8",
+            )
+            row = report_module.pmu_rows(Path(directory))[0]
+            self.assertEqual(row["ipc"], 2.0)
+            self.assertEqual(row["cycles_per_transaction"], 100.0)
+            self.assertEqual(row["instructions_per_transaction"], 200.0)
+            self.assertEqual(row["branch_miss"], 5.0)
+            self.assertEqual(row["l1d_miss"], 5.0)
+            self.assertIsNone(row["llc_miss"])
+            self.assertEqual(row["running"], 80.0)
+            self.assertFalse(row["qualified"])
+
+    def test_overhead_pmu_rows_count_direct_kernel_iterations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "overhead_pmu_inspectprebuilt.csv").write_text(
+                "1000,,cycles,100,100.00,,\n"
+                "2000,,instructions,100,100.00,,\n"
+                "500,,branches,100,100.00,,\n"
+                "25,,branch-misses,100,100.00,,\n",
+                encoding="utf-8",
+            )
+            (root / "overhead_pmu_inspectprebuilt_group_00.log").write_text(
+                "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation/repeats:10  "
+                "100 ns  100 ns  10 bytes=x\n",
+                encoding="utf-8",
+            )
+            row = report_module.overhead_pmu_rows(root)[0]
+            self.assertEqual(row["cycles_per_transaction"], 100.0)
+            self.assertEqual(row["instructions_per_transaction"], 200.0)
+            self.assertEqual(row["ipc"], 2.0)
+            self.assertTrue(row["qualified"])
+            self.assertTrue(
+                run_module.validate_pmu_csv(
+                    root / "overhead_pmu_inspectprebuilt.csv"
+                )["valid"]
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "nginx": {
+    "version": "1.30.4",
+    "url": "https://nginx.org/download/nginx-1.30.4.tar.gz",
+    "sha256": "4261dc90e9e47c1c4041276e9aaa3d48ebe2e664f728e14fa95ae6c67d57a08b"
+  },
+  "go": {
+    "version": "1.25.12",
+    "linux_amd64_sha256": "234828b7a89e0e303d2556310ee549fbcf253d28de937bac3da13d6294262ac1",
+    "linux_arm64_sha256": "8b5884aef89600aef5b0b051fb971f11f49bb996521e911f30f02a66884f7bd2"
+  },
+  "google_benchmark": {
+    "tag": "v1.9.5",
+    "commit": "192ef10025eb2c4cdd392bc502f0c852196baa48"
+  },
+  "wrk": {
+    "tag": "4.2.0",
+    "commit": "a211dd5a7050b1f9e8a9870b95513060e72ac4a0"
+  },
+  "wrk2": {
+    "commit": "44a94c17d8e6a0bac8559b53da76848e430cb7a7"
+  },
+  "modsecurity": {
+    "tag": "v3.0.16",
+    "commit": "7ea9fefbe0ba409d8733b4d682c8c4c059cd028d"
+  },
+  "pcre2_modsecurity_only": {
+    "version": "10.46",
+    "tag": "pcre2-10.46",
+    "commit": "b2bd4254b379b9d7dc9a3dda060a7e27009ccdff"
+  },
+  "modsecurity_nginx": {
+    "tag": "v1.0.4",
+    "commit": "3f4b57df10ce43b1f1c722141f7621dc64838be8"
+  },
+  "coraza": {
+    "tag": "v3.7.0",
+    "commit": "27069d06c896be74b77b9a6c0b539a0cbfaca360"
+  },
+  "libcoraza": {
+    "tag": "v1.6.0",
+    "commit": "8de183a9282c0cd2215151c5862e2bc232a2811d"
+  },
+  "coraza_nginx": {
+    "tag": "v0.11.4",
+    "commit": "0a483dd07f206b9cae7483de5433675484d069b6"
+  },
+  "naxsi": {
+    "tag": "1.7",
+    "commit": "867a61f16be7f55fed65bb538de87eb64df71a77"
+  },
+  "go_ftw": {
+    "tag": "v2.4.0",
+    "commit": "23db497e3a6133888fcd5e087b8cf456556df041"
+  }
+}
