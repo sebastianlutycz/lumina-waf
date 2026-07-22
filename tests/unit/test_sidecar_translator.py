@@ -1047,7 +1047,12 @@ class SidecarTranslatorTest(unittest.TestCase):
         self.assertIn("transformed_offset -= cmdline_boundary_fold", dispatch_source)
         self.assertIn("lumina_transform_sequence_may_change", dispatch_source)
         self.assertIn("g_transform_sequence_dirty_by_byte[data[i]]", dispatch_source)
-        self.assertIn("g_transform_input_class.valid = 0", dispatch_source)
+        self.assertIn("LuminaTransformDispatchWorkspace", dispatch_source)
+        self.assertIn("__attribute__((noinline)) LuminaTransformDispatchWorkspace", dispatch_source)
+        self.assertIn("lumina_acquire_transform_dispatch_workspace()", dispatch_source)
+        self.assertIn("workspace->input.valid = 0", dispatch_source)
+        self.assertIn("&workspace->input, sequence_id, data, len", dispatch_source)
+        self.assertNotIn("g_transform_input_class", dispatch_source)
 
     def test_transform_dirty_classifier_preserves_generated_match_results(self):
         conf = textwrap.dedent(
