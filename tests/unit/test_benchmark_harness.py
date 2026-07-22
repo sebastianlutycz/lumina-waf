@@ -324,6 +324,120 @@ Requests/sec: 10000.10
         self.assertFalse(parsed["valid"])
         self.assertIn("unparsed socket error counters", parsed["invalid_reasons"])
 
+    def test_canonical_saturation_accepts_overload_beyond_stable_point(self):
+        results = [
+            {
+                "engine": "luminawaf", "connections": 50, "repetition": index,
+                "raw": f"clean-{index}.txt", "valid": True, "invalid_reasons": [],
+            }
+            for index in range(5)
+        ] + [
+            {
+                "engine": "luminawaf", "connections": 200, "repetition": index,
+                "raw": f"overload-{index}.txt", "valid": False,
+                "invalid_reasons": ["socket errors=3"],
+            }
+            for index in range(5)
+        ]
+        validity = e2e_module.evaluate_measurement_validity(
+            mode="saturation", canonical=True, adapter_set="all",
+            results=results,
+            stability=[
+                {"engine": "luminawaf", "connections": 50, "stable": True},
+                {"engine": "luminawaf", "connections": 200, "stable": False},
+            ],
+            identity_errors=[], engine_names=["luminawaf"], expected_results=10,
+        )
+        self.assertTrue(validity["valid"])
+        self.assertTrue(validity["coverage_valid"])
+        self.assertEqual(len(validity["overload_invalid_legs"]), 5)
+        self.assertEqual(validity["infrastructure_invalid_legs"], [])
+
+    def test_canonical_saturation_rejects_infrastructure_failure(self):
+        results = [
+            {
+                "engine": "luminawaf", "connections": 50, "repetition": index,
+                "raw": f"clean-{index}.txt", "valid": True, "invalid_reasons": [],
+            }
+            for index in range(5)
+        ] + [{
+            "engine": "luminawaf", "connections": 200, "repetition": 0,
+            "raw": "broken.txt", "valid": False,
+            "invalid_reasons": ["load generator exit=2"],
+        }]
+        validity = e2e_module.evaluate_measurement_validity(
+            mode="saturation", canonical=True, adapter_set="all",
+            results=results,
+            stability=[{"engine": "luminawaf", "connections": 50, "stable": True}],
+            identity_errors=[], engine_names=["luminawaf"], expected_results=6,
+        )
+        self.assertFalse(validity["valid"])
+        self.assertEqual(len(validity["infrastructure_invalid_legs"]), 1)
+
+    def test_canonical_saturation_mixed_failure_is_infrastructure_failure(self):
+        results = [
+            {
+                "engine": "luminawaf", "connections": 50, "repetition": index,
+                "raw": f"clean-{index}.txt", "valid": True, "invalid_reasons": [],
+            }
+            for index in range(5)
+        ] + [{
+            "engine": "luminawaf", "connections": 200, "repetition": 0,
+            "raw": "mixed-failure.txt", "valid": False,
+            "invalid_reasons": ["socket errors=3", "load generator exit=2"],
+        }]
+        validity = e2e_module.evaluate_measurement_validity(
+            mode="saturation", canonical=True, adapter_set="all",
+            results=results,
+            stability=[{"engine": "luminawaf", "connections": 50, "stable": True}],
+            identity_errors=[], engine_names=["luminawaf"], expected_results=6,
+        )
+        self.assertFalse(validity["valid"])
+        self.assertEqual(validity["overload_invalid_legs"], [])
+        self.assertEqual(len(validity["infrastructure_invalid_legs"]), 1)
+
+    def test_canonical_saturation_rejects_incomplete_sweep(self):
+        results = [{
+            "engine": "luminawaf", "connections": 50, "repetition": index,
+            "raw": f"clean-{index}.txt", "valid": True, "invalid_reasons": [],
+        } for index in range(5)]
+        validity = e2e_module.evaluate_measurement_validity(
+            mode="saturation", canonical=True, adapter_set="all",
+            results=results,
+            stability=[{"engine": "luminawaf", "connections": 50, "stable": True}],
+            identity_errors=[], engine_names=["luminawaf"], expected_results=10,
+        )
+        self.assertFalse(validity["valid"])
+        self.assertFalse(validity["coverage_valid"])
+
+    def test_canonical_fixed_rate_rejects_transport_error(self):
+        results = [{
+            "engine": "luminawaf", "connections": 10, "repetition": index,
+            "raw": f"fixed-{index}.txt", "valid": index != 4,
+            "invalid_reasons": [] if index != 4 else ["socket errors=1"],
+        } for index in range(5)]
+        validity = e2e_module.evaluate_measurement_validity(
+            mode="fixed", canonical=True, adapter_set="all",
+            results=results,
+            stability=[{"engine": "luminawaf", "connections": 10, "stable": True}],
+            identity_errors=[], engine_names=["luminawaf"], expected_results=5,
+        )
+        self.assertFalse(validity["valid"])
+
+    def test_canonical_overhead_saturation_rejects_any_invalid_leg(self):
+        results = [{
+            "engine": "luminawaf", "connections": 100, "repetition": index,
+            "raw": f"overhead-{index}.txt", "valid": index != 4,
+            "invalid_reasons": [] if index != 4 else ["socket errors=1"],
+        } for index in range(5)]
+        validity = e2e_module.evaluate_measurement_validity(
+            mode="saturation", canonical=True, adapter_set="overhead",
+            results=results,
+            stability=[{"engine": "luminawaf", "connections": 100, "stable": True}],
+            identity_errors=[], engine_names=["luminawaf"], expected_results=5,
+        )
+        self.assertFalse(validity["valid"])
+
     def test_manifest_proves_coraza_and_modsecurity_include_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             config = self.materialize_real_reference_config(Path(directory))

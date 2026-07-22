@@ -297,6 +297,84 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
     }
 
 
+SATURATION_OVERLOAD_REASON_PREFIXES = (
+    "non-success responses=",
+    "socket errors=",
+)
+
+
+def evaluate_measurement_validity(
+    *,
+    mode: str,
+    canonical: bool,
+    adapter_set: str,
+    results: list[dict[str, Any]],
+    stability: list[dict[str, Any]],
+    identity_errors: list[str],
+    engine_names: list[str],
+    expected_results: int,
+) -> dict[str, Any]:
+    overload_invalid: list[dict[str, Any]] = []
+    infrastructure_invalid: list[dict[str, Any]] = []
+    for item in results:
+        if item.get("valid"):
+            continue
+        reasons = item.get("invalid_reasons", [])
+        overload_only = (
+            mode == "saturation"
+            and bool(reasons)
+            and all(
+                reason.startswith(SATURATION_OVERLOAD_REASON_PREFIXES)
+                for reason in reasons
+            )
+        )
+        (overload_invalid if overload_only else infrastructure_invalid).append(item)
+
+    coverage_valid = bool(results) and len(results) == expected_results
+    base_valid = coverage_valid and all(item.get("valid") for item in results)
+    stable_engines = {item["engine"] for item in stability if item.get("stable")}
+    stability_valid = (
+        bool(stability) and all(item.get("stable") for item in stability)
+        if adapter_set == "overhead"
+        else all(engine in stable_engines for engine in engine_names)
+    )
+    if canonical and mode == "saturation" and adapter_set != "overhead":
+        valid = (
+            coverage_valid
+            and not infrastructure_invalid
+            and not identity_errors
+            and stability_valid
+        )
+    else:
+        valid = (
+            base_valid
+            and not identity_errors
+            and (stability_valid if canonical else True)
+        )
+
+    def summarize(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "engine": item.get("engine"),
+                "connections": item.get("connections"),
+                "repetition": item.get("repetition"),
+                "raw": item.get("raw"),
+                "invalid_reasons": item.get("invalid_reasons", []),
+            }
+            for item in items
+        ]
+
+    return {
+        "valid": valid,
+        "coverage_valid": coverage_valid,
+        "expected_results": expected_results,
+        "observed_results": len(results),
+        "stability_valid": stability_valid,
+        "overload_invalid_legs": summarize(overload_invalid),
+        "infrastructure_invalid_legs": summarize(infrastructure_invalid),
+    }
+
+
 class NginxLeg:
     def __init__(self, nginx: Path, config: Path, port: int, server_cpu: str, library_path: str):
         self.nginx = nginx
@@ -703,7 +781,6 @@ def main() -> int:
                     "sustainable": args.mode == "saturation" and stable,
                 }
             )
-    base_valid = bool(results) and all(item["valid"] for item in results)
     identity_errors: list[str] = []
     if args.adapter_set == "overhead":
         grouped: dict[tuple[int, int], dict[str, dict[str, Any]]] = {}
@@ -719,11 +796,15 @@ def main() -> int:
             if (group["luminawaf-loaded-off"]["normalized_config_sha256"]
                     != group["luminawaf"]["normalized_config_sha256"]):
                 identity_errors.append(f"round {key} Lumina enabled/off config identity differs")
-    stable_engines = {item["engine"] for item in stability if item["stable"]}
-    stability_valid = (
-        bool(stability) and all(item["stable"] for item in stability)
-        if args.adapter_set == "overhead"
-        else all(adapter.name in stable_engines for adapter in engines)
+    validity = evaluate_measurement_validity(
+        mode=args.mode,
+        canonical=args.canonical,
+        adapter_set=args.adapter_set,
+        results=results,
+        stability=stability,
+        identity_errors=identity_errors,
+        engine_names=[adapter.name for adapter in engines],
+        expected_results=len(engines) * len(connection_points) * args.repetitions,
     )
     payload = {
         "schema": 1,
@@ -746,8 +827,7 @@ def main() -> int:
         "results": results,
         "stability": stability,
         "identity_errors": identity_errors,
-        "valid": base_valid and not identity_errors
-        and (stability_valid if args.canonical else True),
+        **validity,
     }
     (args.output / "results.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
