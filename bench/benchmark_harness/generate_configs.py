@@ -60,7 +60,7 @@ http {{
         listen 19090;
         location / {{
             root {ROOT}/test_nginx/html;
-            try_files $uri $uri/ /about;
+            try_files $uri =404;
             {{DIRECTIVES}}
         }}
         {{EXTRA}}

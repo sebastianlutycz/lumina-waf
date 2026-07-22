@@ -33,8 +33,8 @@ class Adapter:
     original_port: int | None = None
 
 
-def prepare_prefix(prefix: Path = PREFIX) -> None:
-    """Materialize the ignored NGINX runtime tree required by generated configs."""
+def prepare_prefix(prefix: Path = PREFIX, workload: Path = DEFAULT_WORKLOAD) -> None:
+    """Materialize the ignored NGINX runtime tree and immutable static targets."""
     for relative in (
         "logs",
         "tmp/client_body",
@@ -42,10 +42,24 @@ def prepare_prefix(prefix: Path = PREFIX) -> None:
         "tmp/fastcgi",
         "tmp/uwsgi",
         "tmp/scgi",
-        "html",
     ):
         (prefix / relative).mkdir(parents=True, exist_ok=True)
-    (prefix / "html/about").write_bytes(b"OK")
+    shutil.rmtree(prefix / "html", ignore_errors=True)
+    (prefix / "html").mkdir(parents=True)
+    html = (prefix / "html").resolve()
+    paths = {"/about"}
+    payload = json.loads(workload.read_text(encoding="utf-8"))
+    paths.update(str(item["path"]) for item in payload.get("requests", []))
+    for request_path in paths:
+        if not request_path.startswith("/") or request_path.endswith("/"):
+            raise RuntimeError(f"workload path is not a static file target: {request_path!r}")
+        target = (html / request_path.lstrip("/")).resolve()
+        try:
+            target.relative_to(html)
+        except ValueError as exc:
+            raise RuntimeError(f"workload path escapes static root: {request_path!r}") from exc
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"OK")
 
 
 def required_config(variable: str) -> Path:
@@ -89,8 +103,9 @@ def adapters(include_optional: bool, adapter_set: str = "all") -> list[Adapter]:
     return values
 
 
-def render_config(adapter: Adapter, destination: Path, port: int, workers: int) -> None:
-    prepare_prefix()
+def render_config(adapter: Adapter, destination: Path, port: int, workers: int,
+                  workload: Path = DEFAULT_WORKLOAD) -> None:
+    prepare_prefix(PREFIX, workload)
     text = adapter.source_config.read_text(encoding="utf-8")
     text, listen_count = re.subn(r"\blisten\s+\d+\s*;", f"listen {port};", text, count=1)
     if listen_count != 1:
@@ -102,7 +117,7 @@ def render_config(adapter: Adapter, destination: Path, port: int, workers: int) 
     if worker_count != 1:
         raise RuntimeError(f"{adapter.name}: cannot replace worker_processes")
     text, fallback_count = re.subn(
-        r"try_files\s+[^;]+;", "try_files $uri $uri/ /about;", text, count=1
+        r"try_files\s+[^;]+;", "try_files $uri =404;", text, count=1
     )
     if fallback_count != 1:
         raise RuntimeError(f"{adapter.name}: cannot normalize static response fallback")
@@ -251,8 +266,7 @@ def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: in
             connections: int, rate: int | None, script: Path) -> subprocess.CompletedProcess[str]:
     command = [
         "taskset", "-c", client_cpu, str(binary), f"-t{threads}", f"-c{connections}",
-        f"-d{duration}", "-L", "-H", "Host: benchmark.local", "-H",
-        "User-Agent: LuminaIronBenchmark/10", "-s", str(script),
+        f"-d{duration}", "-L", "-s", str(script),
     ]
     if rate is not None:
         command.append(f"-R{rate}")
@@ -269,14 +283,21 @@ def write_wrk_script(workload: Path, destination: Path) -> int:
     for item in requests:
         query = item.get("query", "")
         target = item["path"] + (("?" + query) if query else "")
+        header_names = [str(name).lower() for name, _ in item.get("headers", [])]
+        if header_names.count("host") != 1:
+            raise RuntimeError(
+                f"allow request {item.get('id', '<unknown>')} must declare exactly one Host header"
+            )
         headers = ", ".join(
             f"[{json.dumps(str(name))}]={json.dumps(str(value))}"
             for name, value in item.get("headers", [])
         )
+        body = str(item.get("body", ""))
+        lua_body = "nil" if body == "" else json.dumps(body)
         rows.append(
             "  {method=" + json.dumps(item.get("method", "GET"))
             + ", target=" + json.dumps(target)
-            + ", body=" + json.dumps(item.get("body", ""))
+            + ", body=" + lua_body
             + ", headers={" + headers + "}}"
         )
     destination.write_text(
@@ -388,7 +409,7 @@ def main() -> int:
         for connections in connection_points:
             for adapter in rotated_order(engines, repetition):
                 config = args.output / f"nginx_{adapter.name}_{repetition}_{connections}.conf"
-                render_config(adapter, config, args.port, args.workers)
+                render_config(adapter, config, args.port, args.workers, args.workload)
                 leg = NginxLeg(args.nginx, config, args.port, args.server_cpu, args.library_path)
                 raw_path = args.output / f"{args.mode}_{repetition:02d}_{connections}_{adapter.name}.txt"
                 try:

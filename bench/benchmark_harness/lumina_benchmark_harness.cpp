@@ -296,21 +296,31 @@ class ModSecurityEngine {
     int run(const Request &request) {
         modsecurity::Transaction transaction(&engine_, &rules_, nullptr);
         transaction.processConnection("127.0.0.1", 12345, "127.0.0.1", 8080);
+        if (intervention_blocked(transaction)) return 1;
+
+        transaction.processURI(request.uri.c_str(), kMethod, kProtocolToken);
+        if (intervention_blocked(transaction)) return 1;
+
         transaction.addRequestHeader(kHostName, kHostValue);
         transaction.addRequestHeader(kUserAgentName, kUserAgentValue);
         transaction.addRequestHeader(kAcceptName, kAcceptValue);
-        transaction.processURI(request.uri.c_str(), kMethod, kProtocolToken);
         transaction.processRequestHeaders();
+        if (intervention_blocked(transaction)) return 1;
+
         transaction.processRequestBody();
+        return intervention_blocked(transaction) ? 1 : 0;
+    }
+
+  private:
+    static bool intervention_blocked(modsecurity::Transaction &transaction) {
         modsecurity::ModSecurityIntervention intervention;
         modsecurity::intervention::clean(&intervention);
-        transaction.intervention(&intervention);
-        const int blocked = intervention.disruptive != 0;
+        const bool blocked = transaction.intervention(&intervention)
+            && intervention.disruptive != 0;
         modsecurity::intervention::free(&intervention);
         return blocked;
     }
 
-  private:
     modsecurity::ModSecurity engine_;
     modsecurity::RulesSet rules_;
     std::string config_;
@@ -375,25 +385,45 @@ class CorazaEngine {
         const coraza_handle_t transaction = new_transaction_(waf_);
         if (transaction == 0) return -1;
         process_connection_(transaction, "127.0.0.1", 12345, "127.0.0.1", 8080);
+        if (intervention_blocked(transaction)) {
+            free_transaction_(transaction);
+            return 1;
+        }
+
+        process_uri_(transaction, request.uri.c_str(), kMethod, kProtocolToken);
+        if (intervention_blocked(transaction)) {
+            free_transaction_(transaction);
+            return 1;
+        }
+
         add_header_(transaction, kHostName, sizeof(kHostName) - 1, kHostValue,
                     sizeof(kHostValue) - 1);
         add_header_(transaction, kUserAgentName, sizeof(kUserAgentName) - 1,
                     kUserAgentValue, sizeof(kUserAgentValue) - 1);
         add_header_(transaction, kAcceptName, sizeof(kAcceptName) - 1, kAcceptValue,
                     sizeof(kAcceptValue) - 1);
-        process_uri_(transaction, request.uri.c_str(), kMethod, kProtocolToken);
         process_headers_(transaction);
+        if (intervention_blocked(transaction)) {
+            free_transaction_(transaction);
+            return 1;
+        }
+
         process_body_(transaction);
-        CorazaIntervention *intervention = intervention_(transaction);
-        // libcoraza's connector contract treats any non-200 intervention as
-        // disruptive; the exported ABI currently leaves `disruptive` unset.
-        const int blocked = intervention != nullptr && intervention->status != 200;
-        if (intervention != nullptr) free_intervention_(intervention);
+        const int blocked = intervention_blocked(transaction) ? 1 : 0;
         free_transaction_(transaction);
         return blocked;
     }
 
   private:
+    bool intervention_blocked(coraza_handle_t transaction) const {
+        CorazaIntervention *intervention = intervention_(transaction);
+        // libcoraza's connector contract treats any non-200 intervention as
+        // disruptive; the exported ABI currently leaves `disruptive` unset.
+        const bool blocked = intervention != nullptr && intervention->status != 200;
+        if (intervention != nullptr) free_intervention_(intervention);
+        return blocked;
+    }
+
     template <typename T> T symbol(const char *name) {
         void *address = dlsym(library_, name);
         if (address == nullptr) throw std::runtime_error(std::string("missing symbol: ") + name);

@@ -102,10 +102,42 @@ class BenchmarkHarnessTest(unittest.TestCase):
     def test_nginx_runtime_prefix_is_materialized_from_source(self):
         with tempfile.TemporaryDirectory() as directory:
             prefix = Path(directory) / "test_nginx"
+            stale = prefix / "html/stale"
+            stale.parent.mkdir(parents=True)
+            stale.write_bytes(b"stale")
             e2e_module.prepare_prefix(prefix)
+            self.assertFalse(stale.exists())
             self.assertEqual((prefix / "html/about").read_bytes(), b"OK")
+            workload = json.loads(
+                (ROOT / "bench/benchmark_harness/workloads/requests.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            for request in workload["requests"]:
+                target = prefix / "html" / request["path"].lstrip("/")
+                self.assertEqual(target.read_bytes(), b"OK")
             for relative in ("logs", "tmp/client_body", "tmp/proxy", "html"):
                 self.assertTrue((prefix / relative).is_dir())
+
+    def test_rendered_nginx_config_has_no_internal_redirect_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.conf"
+            source.write_text(
+                "worker_processes 1;\n"
+                "pid /tmp/source.pid;\n"
+                "events {}\n"
+                "http { server { listen 8080; location / { "
+                "try_files $uri =404; } } }\n",
+                encoding="utf-8",
+            )
+            output = root / "rendered.conf"
+            adapter = e2e_module.Adapter("baseline", "baseline", source)
+            with mock.patch.object(e2e_module, "PREFIX", root / "runtime"):
+                e2e_module.render_config(adapter, output, 19090, 1)
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("try_files $uri =404;", rendered)
+            self.assertNotIn("/about", rendered)
 
     def test_reference_config_rewrites_host_specific_crs_root(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -285,7 +317,59 @@ Requests/sec: 10000.10
                 ROOT / "bench/benchmark_harness/workloads/requests.json", output
             )
             self.assertGreaterEqual(count, 5)
-            self.assertIn("wrk.format", output.read_text(encoding="utf-8"))
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("wrk.format", rendered)
+            self.assertIn("body=nil", rendered)
+            self.assertNotIn('body=""', rendered)
+
+    def test_allow_workload_requires_explicit_host_header(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workload = root / "requests.json"
+            workload.write_text(json.dumps({
+                "requests": [{
+                    "id": "missing-host", "class": "allow", "method": "GET",
+                    "path": "/", "headers": [], "body": "",
+                }],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "exactly one Host header"):
+                e2e_module.write_wrk_script(workload, root / "workload.lua")
+
+    def test_wrk_command_does_not_inject_headers_outside_the_workload(self):
+        with mock.patch("subprocess.run") as run:
+            e2e_module.run_wrk(
+                Path("/tmp/wrk"), "2", 19090, "1s", 1, 10, 100,
+                Path("/tmp/workload.lua"),
+            )
+        command = run.call_args.args[0]
+        self.assertNotIn("-H", command)
+
+    def test_direct_comparators_check_intervention_after_every_phase(self):
+        source = (ROOT / "bench/benchmark_harness/lumina_benchmark_harness.cpp").read_text(
+            encoding="utf-8"
+        )
+        modsecurity = source.split("class ModSecurityEngine", 1)[1].split(
+            "class CorazaEngine", 1
+        )[0]
+        coraza = source.split("class CorazaEngine", 1)[1].split(
+            "void verify_or_skip", 1
+        )[0]
+        for implementation in (modsecurity, coraza):
+            cursor = 0
+            for token in (
+                "process_connection" if implementation is coraza else "processConnection",
+                "intervention_blocked",
+                "process_uri" if implementation is coraza else "processURI",
+                "intervention_blocked",
+                "add_header" if implementation is coraza else "addRequestHeader",
+                "process_headers" if implementation is coraza else "processRequestHeaders",
+                "intervention_blocked",
+                "process_body" if implementation is coraza else "processRequestBody",
+                "intervention_blocked",
+            ):
+                cursor = implementation.find(token, cursor)
+                self.assertNotEqual(cursor, -1, token)
+                cursor += len(token)
 
     def test_coraza_ftw_summary_rejects_outcome_overrides(self):
         summary = coraza_module.normalize_ftw(

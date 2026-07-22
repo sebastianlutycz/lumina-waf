@@ -79,8 +79,10 @@ incorrect response, stale artifact, insufficient samples or missing raw evidence
 Google Benchmark executes one complete inbound lifecycle per iteration:
 
 - LuminaWAF receives typed request collections and fresh request-local state;
-- ModSecurity receives a fresh transaction, connection, URI, headers, body phases and intervention;
-- Coraza receives the equivalent lifecycle through the pinned libcoraza ABI.
+- ModSecurity receives a fresh transaction and follows the connector order: connection, URI,
+  request headers and request body, with an intervention check after every phase;
+- Coraza receives the equivalent phase order and intervention cadence through the pinned
+  libcoraza ABI.
 
 Immutable request storage and engine configuration stay outside the timed loop. Transaction-local
 work remains inside because it is part of the engine cost. Attack rows measure time to a blocking
@@ -95,6 +97,16 @@ Inner-repetition CV remains a diagnostic and is never substituted for process-le
 Fixed-rate latency uses `wrk2` with one immutable, predeclared allow-request rotation. The load
 generator and NGINX worker use disjoint recorded CPU sets. Worker count, connections, keepalive,
 headers and backend response are identical across engines.
+
+The V1.0 performance rotation contains six HTTP/1.1 `GET` requests with empty bodies. Its E2E
+results therefore cover URI, query and request-header inspection, not request-body ingestion. The
+generated Lua sends an absent body as `nil`, preserving the manifest header set instead of allowing
+`wrk.format()` to synthesize `Content-Length: 0`.
+
+Every workload path is materialized as an identical two-byte static file. NGINX uses
+`try_files $uri =404`; it does not internally redirect misses to a shared fallback URI. This keeps
+one external request equal to one WAF transaction and preserves the original URI through all WAF
+phases.
 
 Each fixed-rate leg runs an unmeasured one-second `wrk2` warm-up after NGINX preflight and response
 probing. Its raw output and exit status are retained. Server CPU accounting starts only after this
@@ -202,6 +214,8 @@ Qualified rows require minimum `time_running >=90%` and report:
 
 Unsupported events are rendered as `unavailable`, never zero, without hiding supported counters.
 PMU values explain execution behavior; they do not replace latency or throughput measurements.
+Canonical mode fails closed if cycles, instructions, branches or branch misses are absent, or if
+their grouped running percentage falls below 90%, for any CRS engine.
 
 LuminaWAF's SQL injection operator is the Lumina-owned `src/lumina_sqli.c`. Before benchmark or PMU
 collection, V1.0 Protocol rejects `libluminawaf.so` if `readelf` finds a legacy `libinjection_*`

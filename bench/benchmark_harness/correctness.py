@@ -21,11 +21,12 @@ def send(port: int, request: dict[str, Any]) -> int:
     query = request.get("query", "")
     target = request["path"] + (("?" + query) if query else "")
     headers = {str(name): str(value) for name, value in request.get("headers", [])}
+    body = str(request.get("body", "")).encode("utf-8")
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5.0)
     try:
         connection.request(
             request.get("method", "GET"), target,
-            body=request.get("body", "").encode("utf-8"), headers=headers,
+            body=body if body else None, headers=headers,
         )
         response = connection.getresponse()
         response.read()
@@ -54,7 +55,7 @@ def main() -> int:
     summaries: list[dict[str, Any]] = []
     for adapter in adapters(args.canonical):
         config = args.output / f"nginx_{adapter.name}.conf"
-        render_config(adapter, config, args.port, 1)
+        render_config(adapter, config, args.port, 1, args.workload)
         leg = NginxLeg(args.nginx, config, args.port, args.server_cpu, args.library_path)
         engine_rows: list[dict[str, Any]] = []
         try:

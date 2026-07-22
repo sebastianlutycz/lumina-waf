@@ -541,6 +541,9 @@ def main() -> int:
     coraza_config = os.environ.get("LUMINA_BENCH_V1_CORAZA_CONFIG")
     if coraza_config:
         manifest_command.extend(["--coraza-config", coraza_config])
+    pmu_qualification: dict[str, object] = {
+        "valid": False, "reason": "PMU is collected only in qualified modes"
+    }
     overhead_pmu_qualification: dict[str, object] = {
         "valid": False, "reason": "PMU is collected only in qualified modes"
     }
@@ -730,6 +733,18 @@ def main() -> int:
                     log=result / f"pmu_{engine.lower()}_group_{group_index:02d}.log",
                     env=env,
                 )
+        pmu_rows = [
+            validate_pmu_csv(result / f"pmu_{engine.lower()}.csv")
+            for engine in ("LuminaWAF", "ModSecurity", "Coraza")
+        ]
+        pmu_qualification = {
+            "schema": 1,
+            "valid": all(row["valid"] for row in pmu_rows),
+            "required_minimum_running_percent": 90.0,
+            "rows": pmu_rows,
+        }
+        if not pmu_qualification["valid"]:
+            raise RuntimeError("qualified engine PMU evidence is incomplete or multiplexed")
         for kernel in ("InspectPrebuilt", "FullDirect"):
             pmu_path = result / f"overhead_pmu_{kernel.lower()}.csv"
             for group_index, group in enumerate(pmu_groups):
@@ -759,6 +774,10 @@ def main() -> int:
         }
         if not overhead_pmu_qualification["valid"]:
             raise RuntimeError("qualified overhead PMU evidence is incomplete or multiplexed")
+    (result / "pmu_qualification.json").write_text(
+        json.dumps(pmu_qualification, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     (result / "overhead_pmu_qualification.json").write_text(
         json.dumps(overhead_pmu_qualification, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1034,6 +1053,7 @@ def main() -> int:
     canonical = (
         strict and manifest["canonical"] and bool(micro_qualification["valid"])
         and bool(overhead_micro_qualification["valid"])
+        and bool(pmu_qualification["valid"])
         and bool(overhead_pmu_qualification["valid"])
         and bool(artifact_postflight["valid"])
         and fixed_results["valid"] and saturation_results["valid"]
@@ -1059,6 +1079,7 @@ def main() -> int:
         "artifact_postflight": artifact_postflight,
         "micro_qualification": micro_qualification,
         "overhead_micro_qualification": overhead_micro_qualification,
+        "pmu_qualification": pmu_qualification,
         "overhead_pmu_qualification": overhead_pmu_qualification,
         "sampling_plan": sampling_plan,
         "overhead_sampling_plan": overhead_plan,

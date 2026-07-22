@@ -650,6 +650,11 @@ def render(result_dir: Path) -> str:
     saturation_primary = [row for row in saturation if row["table"] != "native-waf"]
     saturation_native = [row for row in saturation if row["table"] == "native-waf"]
     pmu = pmu_rows(result_dir)
+    pmu_qualification_path = result_dir / "pmu_qualification.json"
+    pmu_qualification = (
+        load(pmu_qualification_path) if pmu_qualification_path.exists()
+        else run.get("pmu_qualification", {})
+    )
     matrix_path = result_dir / "correctness_matrix/results.json"
     correctness = load(matrix_path).get("summary", []) if matrix_path.exists() else []
     full_correctness = full_correctness_rows(result_dir)
@@ -741,6 +746,8 @@ def render(result_dir: Path) -> str:
         f"{'PASS' if len(micro_paths) >= 5 and micro_qualification.get('valid') else 'NOT QUALIFIED'} |",
         f"| Inner repetitions retained | {micro_qualification.get('required_repetitions', 'unknown')} | 10 raw/process | "
         f"{'PASS' if micro_qualification.get('valid') and len(micro_paths) >= 5 else 'NOT QUALIFIED'} |",
+        f"| Engine PMU diagnostics | {len(pmu_qualification.get('rows', []))} engines | complete counters and >=90% running | "
+        f"{'PASS' if pmu_qualification.get('valid') else 'NOT QUALIFIED'} |",
         f"| Artifact integrity | {run.get('phases', {}).get('artifacts', 'not-run')} | pre/post hashes identical | "
         f"{'PASS' if run.get('phases', {}).get('artifacts') == 'passed' else 'NOT QUALIFIED'} |",
         f"| Lumina CRS oracle gate | {run.get('phases', {}).get('lumina_crs', 'not-run')} | passed | "
@@ -974,7 +981,10 @@ def render(result_dir: Path) -> str:
             "",
             "## E2E Fixed-Rate Latency",
             "",
-            "Values are medians across independent runs; brackets contain the 95% bootstrap CI.",
+            "Values are medians across independent runs; brackets contain the 95% bootstrap CI. "
+            "The immutable performance rotation contains six HTTP/1.1 GET requests with empty "
+            "bodies, so this section measures URI, query and request-header inspection rather than "
+            "request-body ingestion.",
             "",
             "| Engine | Rate | p50 [95% CI] | p90 [95% CI] | p99 [95% CI] | p99.9 [95% CI] | Max | Runs | Min samples/run | RPS CV | Qualification |",
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
@@ -1023,7 +1033,9 @@ def render(result_dir: Path) -> str:
             "",
             "## PMU Diagnostics",
             "",
-            "Grouped counters are diagnostics for the allow transaction, not headline latency.",
+            "Grouped counters are diagnostics for the allow transaction, not headline latency. "
+            "Qualification details are retained in "
+            "[`pmu_qualification.json`](pmu_qualification.json).",
             "",
             "| Engine | Cycles/transaction | Instructions/transaction | IPC | Branch misses | Cache misses | L1D misses | LLC misses | iTLB misses | Minimum running | Quality |",
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
