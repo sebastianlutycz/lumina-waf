@@ -257,6 +257,15 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
     requests_match = re.search(r"\b([0-9]+) requests in\b", text)
     rate_match = re.search(r"^Requests/sec:\s*([0-9.]+)", text, re.MULTILINE)
     errors_match = re.search(r"Non-2xx or 3xx responses:\s*([0-9]+)", text)
+    socket_line = re.search(r"^Socket errors:\s*(.+)$", text, re.MULTILINE)
+    socket_error_breakdown = {
+        name: int(value)
+        for name, value in re.findall(
+            r"\b(connect|read|write|timeout)\s+([0-9]+)\b",
+            socket_line.group(1) if socket_line else "",
+        )
+    }
+    socket_errors = sum(socket_error_breakdown.values())
     total = int(requests_match.group(1)) if requests_match else 0
     errors = int(errors_match.group(1)) if errors_match else 0
     accepted = max(0, total - errors)
@@ -264,6 +273,10 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
     reasons: list[str] = []
     if errors:
         reasons.append(f"non-success responses={errors}")
+    if socket_line and len(socket_error_breakdown) != 4:
+        reasons.append("unparsed socket error counters")
+    if socket_errors:
+        reasons.append(f"socket errors={socket_errors}")
     if requested_rate is not None and achieved < requested_rate * 0.90:
         reasons.append(f"achieved rate {achieved:.2f} < 90% of {requested_rate}")
     if requested_rate is not None and accepted < min_samples:
@@ -275,6 +288,8 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
         "requests": total,
         "accepted_requests": accepted,
         "non_success": errors,
+        "socket_errors": socket_errors,
+        "socket_error_breakdown": socket_error_breakdown,
         "requests_per_second": achieved,
         "latency_us": percentiles,
         "valid": not reasons,

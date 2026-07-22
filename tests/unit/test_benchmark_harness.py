@@ -296,6 +296,33 @@ Requests/sec: 10000.10
         self.assertEqual(parsed["latency_us"]["p99_9"], 5250.0)
         self.assertEqual(parsed["latency_us"]["max"], 7000.0)
         self.assertEqual(parsed["accepted_requests"], 100001)
+        self.assertEqual(parsed["socket_errors"], 0)
+        self.assertEqual(parsed["socket_error_breakdown"], {})
+
+    def test_wrk_parser_rejects_transport_errors(self):
+        raw = """
+  100001 requests in 10.00s
+Requests/sec: 10000.10
+Socket errors: connect 1, read 2, write 3, timeout 4
+"""
+        parsed = e2e_module.parse_wrk(raw, requested_rate=None, min_samples=0)
+        self.assertFalse(parsed["valid"])
+        self.assertEqual(parsed["socket_errors"], 10)
+        self.assertEqual(
+            parsed["socket_error_breakdown"],
+            {"connect": 1, "read": 2, "write": 3, "timeout": 4},
+        )
+        self.assertIn("socket errors=10", parsed["invalid_reasons"])
+
+    def test_wrk_parser_rejects_malformed_socket_error_line(self):
+        raw = """
+  100001 requests in 10.00s
+Requests/sec: 10000.10
+Socket errors: timeout unknown
+"""
+        parsed = e2e_module.parse_wrk(raw, requested_rate=None, min_samples=0)
+        self.assertFalse(parsed["valid"])
+        self.assertIn("unparsed socket error counters", parsed["invalid_reasons"])
 
     def test_manifest_proves_coraza_and_modsecurity_include_identity(self):
         with tempfile.TemporaryDirectory() as directory:
