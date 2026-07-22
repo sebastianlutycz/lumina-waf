@@ -813,6 +813,43 @@ Requests/sec: 9999.90
             self.assertEqual(row["running"], 80.0)
             self.assertFalse(row["qualified"])
 
+    def test_execute_pmu_group_records_strict_unsupported_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "pmu_group_03.log"
+            csv_path = root / "pmu.csv"
+            csv_path.write_text("1000,,cycles,100,100.00,,\n", encoding="utf-8")
+            run_module.execute_pmu_group(
+                [
+                    sys.executable,
+                    "-c",
+                    "print('Error:\\nThe LLC-loads event is not supported.'); raise SystemExit(255)",
+                ],
+                cwd=root,
+                log=log,
+                csv_path=csv_path,
+                events=("LLC-loads", "LLC-load-misses"),
+            )
+            evidence = csv_path.read_text(encoding="utf-8")
+            self.assertIn("<not supported>,,LLC-loads,0,0.00", evidence)
+            self.assertIn("<not supported>,,LLC-load-misses,0,0.00", evidence)
+            status = json.loads(log.with_suffix(".status.json").read_text(encoding="utf-8"))
+            self.assertEqual(status["classification"], "unsupported_pmu_event_group")
+            self.assertEqual(status["returncode"], 255)
+            self.assertEqual(status["events"], ["LLC-loads", "LLC-load-misses"])
+
+    def test_execute_pmu_group_rejects_non_capability_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, r"command failed \(2\)"):
+                run_module.execute_pmu_group(
+                    [sys.executable, "-c", "print('permission denied'); raise SystemExit(2)"],
+                    cwd=root,
+                    log=root / "pmu_group.log",
+                    csv_path=root / "pmu.csv",
+                    events=("cycles", "instructions"),
+                )
+
     def test_overhead_pmu_rows_count_direct_kernel_iterations(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

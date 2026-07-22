@@ -36,6 +36,42 @@ def execute(command: list[str], *, cwd: Path, log: Path, env: dict[str, str] | N
         raise RuntimeError(f"command failed ({process.returncode}); see {log}")
 
 
+def execute_pmu_group(
+    command: list[str], *, cwd: Path, log: Path, csv_path: Path,
+    events: tuple[str, ...], env: dict[str, str] | None = None,
+) -> None:
+    with log.open("w", encoding="utf-8") as stream:
+        process = subprocess.run(command, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT)
+    if process.returncode == 0:
+        return
+
+    diagnostic = log.read_text(encoding="utf-8", errors="replace")
+    unsupported = re.fullmatch(
+        r"\s*Error:\s*The [A-Za-z0-9_.:/-]+ event is not supported\.\s*",
+        diagnostic,
+        flags=re.IGNORECASE,
+    )
+    if unsupported is None:
+        raise RuntimeError(f"command failed ({process.returncode}); see {log}")
+
+    with csv_path.open("a", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream, lineterminator="\n")
+        for event in events:
+            writer.writerow(["<not supported>", "", event, "0", "0.00", "", ""])
+
+    status = {
+        "schema": 1,
+        "classification": "unsupported_pmu_event_group",
+        "returncode": process.returncode,
+        "events": list(events),
+        "raw_log": log.name,
+    }
+    log.with_suffix(".status.json").write_text(
+        json.dumps(status, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def capture(command: list[str]) -> str:
     try:
         return subprocess.check_output(command, text=True, stderr=subprocess.STDOUT).strip()
@@ -918,7 +954,7 @@ def main() -> int:
             pmu_path = result / f"pmu_{engine.lower()}.csv"
             for group_index, group in enumerate(pmu_groups):
                 append = ["--append"] if group_index else []
-                execute(
+                execute_pmu_group(
                     [
                         "perf", "stat", "-x,", "-o", str(pmu_path), *append,
                         "-e", group,
@@ -929,6 +965,8 @@ def main() -> int:
                     ],
                     cwd=ROOT,
                     log=result / f"pmu_{engine.lower()}_group_{group_index:02d}.log",
+                    csv_path=pmu_path,
+                    events=tuple(group.strip("{}").split(",")),
                     env=env,
                 )
         pmu_rows = [
@@ -947,7 +985,7 @@ def main() -> int:
             pmu_path = result / f"overhead_pmu_{kernel.lower()}.csv"
             for group_index, group in enumerate(pmu_groups):
                 append = ["--append"] if group_index else []
-                execute(
+                execute_pmu_group(
                     [
                         "perf", "stat", "-x,", "-o", str(pmu_path), *append,
                         "-e", group,
@@ -958,6 +996,8 @@ def main() -> int:
                     ],
                     cwd=ROOT,
                     log=result / f"overhead_pmu_{kernel.lower()}_group_{group_index:02d}.log",
+                    csv_path=pmu_path,
+                    events=tuple(group.strip("{}").split(",")),
                     env=env,
                 )
         overhead_pmu_rows = [
