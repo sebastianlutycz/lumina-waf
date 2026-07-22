@@ -13,6 +13,8 @@ deployment cost of each engine.
   transaction for LuminaWAF, ModSecurity and Coraza.
 - **E2E harness:** fixed-rate latency and closed-loop saturation are separate
   experiments against isolated NGINX instances.
+- **Multi-worker scaling:** an optional 1/2/4/8-worker publication supplement measures
+  throughput scaling with disjoint server/client CPU pools and a client-headroom gate.
 - **Overhead decomposition:** paired baseline, loaded-off and PL2 NGINX legs plus direct
   allow-rotation kernels isolate module, adapter and inspection cost without a runtime bypass.
 - **Owned SQLi boundary:** LuminaWAF uses its allocation-free scalar LuminaSQLi operator. V1.0 Protocol
@@ -96,7 +98,24 @@ Set `LUMINA_BENCH_V1_SERVER_CPU`, `LUMINA_BENCH_V1_CLIENT_CPU` and optionally
 mode rejects affinity-only placement when `/sys/devices/system/cpu/isolated`
 does not cover every declared benchmark CPU. The client set must be disjoint from both server and
 microbenchmark sets, including SMT siblings. Server and microbenchmark sets may overlap because
-their phases execute sequentially.
+their phases execute sequentially. Isolated CPUs need not be present in the launch shell's inherited
+affinity mask; the preflight requires them to be online and verifies that `taskset` can enter the
+declared sets before measurement.
+
+To include the fail-closed multi-worker supplement in a qualification or canonical run, reserve
+an isolated server pool large enough for the largest worker point and a separate client pool:
+
+```bash
+LUMINA_BENCH_V1_ENABLE_SCALING=1 \
+LUMINA_BENCH_V1_SCALING_SERVER_CPU=4-11 \
+LUMINA_BENCH_V1_SCALING_CLIENT_CPU=12-15 \
+./bench/benchmark_harness/run.sh canonical
+```
+
+The default points are `1,2,4,8`, with five 30-second repetitions at each connection point. The
+runner scales client threads up to the client-pool size, records load-generator CPU consumption,
+and rejects any selected row whose maximum client utilization exceeds 85%. This section remains
+separate from the primary single-worker latency and CPU-efficiency tables.
 
 The harness records Lumina's complete `DT_NEEDED` set and rejects legacy `libinjection_*` symbols,
 relocations, and comparator/runtime dependencies such as PCRE or ModSecurity before the first
@@ -124,6 +143,9 @@ provenance, including every manifest-owned CRS/data input, did not drift during 
    `lumina_waf off`, and E2 production CRS PL2 at matching connection points. The report derives
    paired server CPU/request deltas, direct bundle/inspection kernels and an integration residual;
    latency percentiles are absolute context and are never subtracted.
+7. **Multi-worker scaling:** optional closed-loop 1/2/4/8-worker throughput, speedup, efficiency,
+   RPS/worker, CPU/request and load-generator headroom. It is a deployment-scaling result, not a
+   replacement for single-worker latency or direct transaction CPU time.
 
 Qualified runs also emit PMU diagnostics for the allow transaction: cycles and instructions per
 transaction, IPC, branch-miss rate, generic cache-miss rate, L1D, LLC and iTLB miss rates, and the

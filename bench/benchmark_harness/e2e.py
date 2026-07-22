@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import resource
 import shutil
 import statistics
 import subprocess
@@ -31,6 +32,27 @@ class Adapter:
     table: str
     source_config: Path
     original_port: int | None = None
+
+
+def parse_cpu_set(value: str) -> list[int]:
+    cpus: set[int] = set()
+    for part in value.split(","):
+        bounds = part.strip().split("-", 1)
+        if not bounds or not bounds[0]:
+            continue
+        start = int(bounds[0])
+        end = int(bounds[1]) if len(bounds) == 2 else start
+        if start < 0 or end < start:
+            raise RuntimeError(f"invalid CPU set: {value}")
+        cpus.update(range(start, end + 1))
+    if not cpus:
+        raise RuntimeError(f"empty CPU set: {value}")
+    return sorted(cpus)
+
+
+def child_cpu_seconds() -> float:
+    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return usage.ru_utime + usage.ru_stime
 
 
 def prepare_prefix(prefix: Path = PREFIX, workload: Path = DEFAULT_WORKLOAD) -> None:
@@ -384,8 +406,14 @@ def main() -> int:
         raise RuntimeError(f"missing NGINX binary: {args.nginx}")
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"missing load generator: {binary}")
-    if args.server_cpu == args.client_cpu:
+    server_cpus = parse_cpu_set(args.server_cpu)
+    client_cpus = parse_cpu_set(args.client_cpu)
+    if set(server_cpus) & set(client_cpus):
         raise RuntimeError("server and load-generator CPU sets must be disjoint")
+    if args.workers > len(server_cpus):
+        raise RuntimeError("NGINX workers exceed the server CPU allocation")
+    if args.threads > len(client_cpus):
+        raise RuntimeError("load-generator threads exceed the client CPU allocation")
     if args.canonical and args.repetitions < 5:
         raise RuntimeError("canonical mode requires at least five independent repetitions")
     if parse_duration_seconds(args.warmup_duration) <= 0.0:
@@ -443,10 +471,12 @@ def main() -> int:
                                 f"fixed-rate warmup exit={warmup.returncode}"
                             )
                     cpu_before = leg.cpu_seconds()
+                    client_cpu_before = child_cpu_seconds()
                     process = run_wrk(
                         binary, args.client_cpu, args.port, args.duration, args.threads,
                         connections, args.rate if args.mode == "fixed" else None, wrk_script,
                     )
+                    client_cpu_seconds = max(0.0, child_cpu_seconds() - client_cpu_before)
                     raw = process.stdout + process.stderr
                     cpu_after = leg.cpu_seconds()
                     raw_path.write_text(raw, encoding="utf-8")
@@ -467,6 +497,15 @@ def main() -> int:
                             "server_cpu": args.server_cpu,
                             "client_cpu": args.client_cpu,
                             "workers": args.workers,
+                            "client_threads": args.threads,
+                            "server_cpu_count": len(server_cpus),
+                            "client_cpu_count": len(client_cpus),
+                            "client_cpu_seconds": client_cpu_seconds,
+                            "client_cpu_utilization_percent": (
+                                client_cpu_seconds
+                                / (parse_duration_seconds(args.duration) * len(client_cpus))
+                                * 100.0
+                            ),
                             "server_cpu_seconds": max(0.0, cpu_after - cpu_before),
                             "server_cpu_accounting": {
                                 "source": "/proc/<nginx-master-or-worker>/stat",
@@ -561,6 +600,9 @@ def main() -> int:
         "server_cpu": args.server_cpu,
         "client_cpu": args.client_cpu,
         "workers": args.workers,
+        "client_threads": args.threads,
+        "server_cpu_count": len(server_cpus),
+        "client_cpu_count": len(client_cpus),
         "connection_points": connection_points,
         "workload": str(args.workload.resolve()),
         "workload_sha256": workload_sha256,

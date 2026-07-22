@@ -645,6 +645,13 @@ def render(result_dir: Path) -> str:
     saturation_path = result_dir / "e2e_saturation/results.json"
     saturation_raw = load(saturation_path) if saturation_path.exists() else {}
     saturation = saturation_rows(saturation_raw) if saturation_raw else []
+    scaling_path = result_dir / "e2e_scaling/results.json"
+    scaling_raw = load(scaling_path) if scaling_path.exists() else {}
+    scaling = scaling_raw.get("rows", []) if scaling_raw else []
+    scaling_plan = scaling_raw.get("plan", {}) if scaling_raw else {}
+    scaling_worker_points = [
+        item.get("workers") for item in scaling_plan.get("points", [])
+    ]
     fixed_primary = [row for row in fixed if row["table"] != "native-waf"]
     fixed_native = [row for row in fixed if row["table"] == "native-waf"]
     saturation_primary = [row for row in saturation if row["table"] != "native-waf"]
@@ -677,6 +684,11 @@ def render(result_dir: Path) -> str:
     )
     saturation_qualified = bool(saturation_raw.get("valid")) and bool(saturation) and all(
         row["qualified"] for row in saturation
+    )
+    scaling_requested = bool(run.get("scaling_qualification", {}).get("requested"))
+    scaling_qualified = (
+        scaling_requested and bool(scaling_raw.get("valid")) and bool(scaling)
+        and all(row.get("qualified") for row in scaling)
     )
     overhead_qualified = (
         run.get("phases", {}).get("overhead") == "passed"
@@ -760,6 +772,9 @@ def render(result_dir: Path) -> str:
         f"{'PASS' if saturation_qualified else 'NOT QUALIFIED'} |",
         f"| Lumina overhead decomposition | {run.get('phases', {}).get('overhead', 'not-run')} | paired E0/E1/E2 + direct kernels | "
         f"{'PASS' if overhead_qualified else 'NOT QUALIFIED'} |",
+        f"| Multi-worker scaling | {run.get('phases', {}).get('scaling', 'not-requested')} | "
+        f"1/2/4/8 workers, >=5 runs, CV <=5%, client CPU <=85% | "
+        f"{'PASS' if scaling_qualified else 'NOT REQUESTED' if not scaling_requested else 'NOT QUALIFIED'} |",
         "",
         "## Sampling Plan",
         "",
@@ -1031,6 +1046,51 @@ def render(result_dir: Path) -> str:
             "divided by completed requests. It excludes the load generator and is diagnostic at "
             "the kernel clock-tick resolution recorded in `e2e_saturation/results.json`.",
             "",
+            "## Multi-Worker Scaling",
+            "",
+            "This optional publication supplement measures throughput scaling independently from "
+            "the primary single-worker latency and efficiency results. Every row uses isolated, "
+            "disjoint server/client CPU sets. Client saturation invalidates a row; saturation "
+            "latency is not reported as service latency. NAXSI remains a native-WAF reference.",
+            "",
+            f"- Worker points: `{scaling_worker_points if scaling_plan else 'not requested'}`",
+            f"- Server CPU pool: `{scaling_plan.get('server_cpu_pool', 'not requested')}`",
+            f"- Client CPU pool: `{scaling_plan.get('client_cpu_pool', 'not requested')}`",
+            f"- Estimated measurement time: "
+            f"`{wall_time_text(scaling_plan.get('estimated_wall_seconds', 0)) if scaling_plan else 'not requested'}`",
+            "",
+            "| Engine | Class | Workers | RPS | Speedup | Efficiency | RPS/worker | CPU/request | Connections | Client CPU median/max | Runs | RPS CV | Qualification |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    if scaling:
+        lines.extend(
+            f"| `{row['engine']}` | `{row.get('table', 'unknown')}` | {row['workers']} | "
+            f"{row['rps']:.2f} | {decimal_text(row.get('speedup'), 2)}x | "
+            f"{percent_text(row.get('scaling_efficiency_percent'))} | "
+            f"{row['rps_per_worker']:.2f} | "
+            f"{format_time(row['server_cpu_ns_per_request']) if row.get('server_cpu_ns_per_request') is not None else 'unavailable'} | "
+            f"{row['connections']} | "
+            f"{percent_text(row.get('client_cpu_utilization_percent'))} / "
+            f"{percent_text(row.get('client_cpu_utilization_max_percent'))} | "
+            f"{row['runs']} | {percent_text(row.get('rps_cv_percent'))} | "
+            f"{'QUALIFIED' if row.get('qualified') else 'NOT QUALIFIED'} |"
+            for row in scaling
+        )
+    else:
+        lines.append("| not requested | - | - | - | - | - | - | - | - | - | - | - | NOT RUN |")
+    lines.append("")
+    if scaling_raw:
+        lines.extend([
+            "Raw scaling plan and aggregate evidence: "
+            "[`e2e_scaling/plan.json`](e2e_scaling/plan.json), "
+            "[`e2e_scaling/results.json`](e2e_scaling/results.json).",
+            "",
+        ])
+    else:
+        lines.extend(["Multi-worker scaling was not requested for this run.", ""])
+    lines.extend(
+        [
             "## PMU Diagnostics",
             "",
             "Grouped counters are diagnostics for the allow transaction, not headline latency. "

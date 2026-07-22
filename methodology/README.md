@@ -6,11 +6,12 @@ of this contract.
 
 ## Claim Boundary
 
-V1.0 Protocol answers three separate questions:
+V1.0 Protocol answers four separate questions:
 
 1. Does each CRS-capable engine produce the required inbound PL2 security outcome?
 2. What is the CPU cost of a complete inbound transaction through each engine ABI?
 3. What latency and throughput does the complete NGINX deployment deliver?
+4. When requested, how does closed-loop throughput scale across 1/2/4/8 NGINX workers?
 
 These measurements are not interchangeable. Direct transaction CPU time is not NGINX latency,
 and saturation throughput is not fixed-rate service latency.
@@ -140,6 +141,28 @@ The server CPU/request diagnostic sums NGINX master and direct-worker `utime+sti
 `/proc/<pid>/stat`, divides by completed requests and records `SC_CLK_TCK`. It excludes the load
 generator.
 
+### Multi-Worker Scaling
+
+Multi-worker scaling is an optional publication supplement and never replaces the primary
+single-worker fixed-rate, saturation or direct CPU results. It repeats the identical closed-loop
+allow workload at `1`, `2`, `4` and `8` NGINX workers. The worker process and its WAF retain the
+production binaries and configurations used by the single-worker experiment.
+
+For an `N`-worker point, NGINX receives `N` dedicated CPUs from the start of the declared server
+pool. The load generator receives `min(N, client_pool_size)` dedicated CPUs and the same number of
+threads. Server and client pools must be disjoint, kernel-isolated physical CPUs. Housekeeping,
+interrupt handling and unrelated services remain outside both pools.
+
+Each point uses at least five independent balanced-order repetitions and a connection sweep. For
+each engine, the report selects its highest sustainable point with zero response errors and RPS CV
+no greater than 5%. It derives speedup relative to that engine's one-worker result, scaling
+efficiency, RPS/worker and server CPU/request.
+
+The runner also measures load-generator `RUSAGE_CHILDREN` CPU time. A selected row is invalid when
+maximum client utilization exceeds 85% of its assigned CPU capacity, preventing a client-limited
+plateau from being reported as a WAF scaling limit. Saturation latency is not reported as service
+latency. NAXSI retains its separate `native-waf` classification in the scaling table.
+
 ### LuminaWAF Overhead Decomposition
 
 The diagnostic decomposition uses one workload and three production NGINX configurations:
@@ -186,6 +209,8 @@ Canonical mode requires:
 - no tracked or untracked changes in the pinned CRS tree;
 - kernel-isolated benchmark CPU sets;
 - load-generator CPUs disjoint from both server and microbenchmark CPUs;
+- when scaling is enabled, all declared scaling server/client CPUs are isolated and mutually
+  disjoint;
 - no SMT siblings shared between the load generator and server/microbenchmark sets;
 - the `performance` governor;
 - every correctness, sample-volume and stability gate.
@@ -197,6 +222,11 @@ Affinity without kernel isolation is insufficient. `qualification` runs use the 
 correctness and sample contract but remain `NON-CANONICAL` on a shared host. Operator annotations,
 load averages, pressure-stall data and process counts document contention but never waive canonical
 requirements.
+
+Linux commonly starts SSH and service processes on housekeeping CPUs after `isolcpus`. Therefore
+canonical preflight does not require the launch shell's inherited affinity mask to already contain
+the isolated CPUs. It requires every declared CPU to be online and kernel-isolated, and probes that
+`taskset` can enter the complete declared benchmark set before any measurement starts.
 
 ## PMU Diagnostics
 

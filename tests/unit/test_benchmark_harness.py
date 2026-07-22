@@ -415,7 +415,11 @@ Requests/sec: 9999.90
             (result / "crs_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             (result / "run_manifest.json").write_text(
                 json.dumps({"mode": "smoke", "canonical": False,
-                            "validity_reason": "test"}), encoding="utf-8"
+                            "validity_reason": "test",
+                            "scaling_qualification": {
+                                "requested": True, "valid": True,
+                            },
+                            "phases": {"scaling": "passed"}}), encoding="utf-8"
             )
             (result / "environment.json").write_text(
                 json.dumps({
@@ -462,6 +466,25 @@ Requests/sec: 9999.90
                             "outcome_overrides": []}),
                 encoding="utf-8",
             )
+            scaling = result / "e2e_scaling"
+            scaling.mkdir()
+            (scaling / "results.json").write_text(
+                json.dumps({
+                    "valid": True,
+                    "rows": [{
+                        "engine": "luminawaf", "table": "crs", "workers": 2,
+                        "rps": 1900.0, "speedup": 1.9,
+                        "scaling_efficiency_percent": 95.0,
+                        "rps_per_worker": 950.0,
+                        "server_cpu_ns_per_request": 110000.0,
+                        "connections": 100,
+                        "client_cpu_utilization_percent": 61.0,
+                        "client_cpu_utilization_max_percent": 64.0,
+                        "runs": 5, "rps_cv_percent": 1.2, "qualified": True,
+                    }],
+                }),
+                encoding="utf-8",
+            )
             rendered = report_module.render(result)
             self.assertIn("NON-CANONICAL", rendered)
             self.assertIn(manifest["manifest_sha256"], rendered)
@@ -477,6 +500,8 @@ Requests/sec: 9999.90
             self.assertIn("shared-loaded-homelab", rendered)
             self.assertIn("Background services remained active.", rendered)
             self.assertIn("A host annotation documents contention", rendered)
+            self.assertIn("Multi-Worker Scaling", rendered)
+            self.assertIn("95.00%", rendered)
 
     def test_micro_qualification_requires_raw_repetitions(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -586,6 +611,75 @@ Requests/sec: 9999.90
             run_module.derive_sampling_plan(
                 saturation, target_samples=100_000, load_fraction=0.61,
             )
+
+    def test_scaling_plan_assigns_disjoint_cpu_prefixes(self):
+        plan = run_module.derive_scaling_plan("4-11", "12-15")
+        self.assertEqual(
+            plan["points"],
+            [
+                {"workers": 1, "server_cpu": "4", "client_cpu": "12", "client_threads": 1},
+                {"workers": 2, "server_cpu": "4,5", "client_cpu": "12,13", "client_threads": 2},
+                {"workers": 4, "server_cpu": "4,5,6,7", "client_cpu": "12,13,14,15", "client_threads": 4},
+                {"workers": 8, "server_cpu": "4,5,6,7,8,9,10,11", "client_cpu": "12,13,14,15", "client_threads": 4},
+            ],
+        )
+        with self.assertRaises(RuntimeError):
+            run_module.derive_scaling_plan("4-7", "7-8", (1, 2, 4))
+        with self.assertRaises(RuntimeError):
+            run_module.derive_scaling_plan("4-7", "12-15")
+        with self.assertRaises(RuntimeError):
+            e2e_module.parse_cpu_set("7-4")
+
+    def test_affinity_probe_checks_taskset_capability(self):
+        completed = subprocess.CompletedProcess([], 0)
+        with mock.patch.object(run_module.subprocess, "run", return_value=completed) as run:
+            self.assertTrue(run_module.affinity_available({4, 5, 6}))
+        self.assertEqual(run.call_args.args[0], ["taskset", "-c", "4,5,6", "true"])
+        completed = subprocess.CompletedProcess([], 1)
+        with mock.patch.object(run_module.subprocess, "run", return_value=completed):
+            self.assertFalse(run_module.affinity_available({4}))
+
+    def test_scaling_summary_requires_stability_and_client_headroom(self):
+        def point(workers, rates, client_utilization):
+            results = []
+            for repetition, rate in enumerate(rates):
+                results.append({
+                    "engine": "luminawaf", "table": "crs", "valid": True,
+                    "connections": 100, "repetition": repetition,
+                    "requests_per_second": rate,
+                    "server_cpu_ns_per_request": 100_000 / workers,
+                    "client_cpu_utilization_percent": client_utilization,
+                })
+            mean = sum(rates) / len(rates)
+            variance = sum((rate - mean) ** 2 for rate in rates) / (len(rates) - 1)
+            cv = variance ** 0.5 / mean * 100.0
+            return {
+                "workers": workers, "server_cpu": f"4-{3 + workers}",
+                "client_cpu": "12-15", "client_threads": min(workers, 4),
+                "results": results,
+                "stability": [{
+                    "engine": "luminawaf", "connections": 100,
+                    "valid_runs": 5, "median_rps": sorted(rates)[2],
+                    "cv_percent": cv, "sustainable": cv <= 5.0,
+                }],
+            }
+
+        summary = run_module.summarize_scaling([
+            point(1, [995, 1000, 1001, 1002, 1005], 40.0),
+            point(2, [1890, 1900, 1902, 1904, 1910], 70.0),
+        ])
+        self.assertTrue(summary["valid"])
+        two_workers = next(row for row in summary["rows"] if row["workers"] == 2)
+        self.assertAlmostEqual(two_workers["speedup"], 1902 / 1001)
+        self.assertAlmostEqual(
+            two_workers["scaling_efficiency_percent"], 1902 / 1001 / 2 * 100
+        )
+
+        saturated = run_module.summarize_scaling([
+            point(1, [995, 1000, 1001, 1002, 1005], 90.0)
+        ])
+        self.assertFalse(saturated["valid"])
+        self.assertTrue(any("client-headroom" in error for error in saturated["errors"]))
 
     def test_artifact_validation_rejects_post_measurement_drift(self):
         with tempfile.TemporaryDirectory() as directory:

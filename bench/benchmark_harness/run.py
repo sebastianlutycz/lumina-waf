@@ -14,6 +14,7 @@ import platform
 import re
 import shlex
 import shutil
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -126,6 +127,8 @@ def environment_manifest() -> dict[str, object]:
             "micro": os.environ.get(
                 "LUMINA_BENCH_V1_MICRO_CPU", os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1")
             ),
+            "scaling_server": os.environ.get("LUMINA_BENCH_V1_SCALING_SERVER_CPU", ""),
+            "scaling_client": os.environ.get("LUMINA_BENCH_V1_SCALING_CLIENT_CPU", ""),
         },
         "go": capture(["go", "version"]),
         "nginx": capture([nginx, "-V"]),
@@ -145,6 +148,8 @@ def parse_cpu_set(value: str) -> set[int]:
             continue
         start = int(bounds[0])
         end = int(bounds[1]) if len(bounds) == 2 else start
+        if start < 0 or end < start:
+            raise RuntimeError(f"invalid CPU set: {value}")
         cpus.update(range(start, end + 1))
     return cpus
 
@@ -161,17 +166,31 @@ def thread_siblings(cpu: int) -> set[int]:
         return {cpu}
 
 
+def affinity_available(cpus: set[int]) -> bool:
+    if not cpus:
+        return False
+    process = subprocess.run(
+        ["taskset", "-c", cpu_set_text(cpus), "true"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return process.returncode == 0
+
+
 def canonical_environment_gate() -> None:
     server = parse_cpu_set(os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1"))
     client = parse_cpu_set(os.environ.get("LUMINA_BENCH_V1_CLIENT_CPU", "2"))
     micro = parse_cpu_set(os.environ.get("LUMINA_BENCH_V1_MICRO_CPU", cpu_set_text(server)))
-    allowed = set(os.sched_getaffinity(0))
     if not server or not client or not micro or server & client or micro & client:
         raise RuntimeError(
             "canonical server/micro and load-generator CPU sets must be non-empty and disjoint"
         )
-    if not server <= allowed or not client <= allowed or not micro <= allowed:
-        raise RuntimeError("canonical CPU sets are outside the process affinity mask")
+    online_text = capture(["bash", "-lc", "cat /sys/devices/system/cpu/online"])
+    online = parse_cpu_set(online_text) if online_text != "unavailable" else set()
+    benchmark_cpus = server | client | micro
+    if not benchmark_cpus <= online or not affinity_available(benchmark_cpus):
+        raise RuntimeError("canonical CPU sets are offline or unavailable to taskset")
     server_threads = set().union(*(thread_siblings(cpu) for cpu in server | micro))
     if server_threads & client:
         raise RuntimeError("canonical load-generator CPUs share an SMT core with server/micro CPUs")
@@ -183,6 +202,30 @@ def canonical_environment_gate() -> None:
         raise RuntimeError(
             "canonical CPU sets must be kernel-isolated; configure isolcpus/nohz_full/rcu_nocbs"
         )
+    if os.environ.get("LUMINA_BENCH_V1_ENABLE_SCALING") == "1":
+        scaling_server = parse_cpu_set(
+            os.environ.get("LUMINA_BENCH_V1_SCALING_SERVER_CPU", "")
+        )
+        scaling_client = parse_cpu_set(
+            os.environ.get("LUMINA_BENCH_V1_SCALING_CLIENT_CPU", "")
+        )
+        if not scaling_server or not scaling_client or scaling_server & scaling_client:
+            raise RuntimeError(
+                "canonical scaling server and load-generator CPU sets must be non-empty "
+                "and disjoint"
+            )
+        scaling_cpus = scaling_server | scaling_client
+        if not scaling_cpus <= online or not affinity_available(scaling_cpus):
+            raise RuntimeError("canonical scaling CPUs are offline or unavailable to taskset")
+        if not scaling_cpus <= isolated:
+            raise RuntimeError("canonical scaling CPU sets must be kernel-isolated")
+        scaling_server_threads = set().union(
+            *(thread_siblings(cpu) for cpu in scaling_server)
+        )
+        if scaling_server_threads & scaling_client:
+            raise RuntimeError(
+                "canonical scaling load-generator CPUs share an SMT core with server CPUs"
+            )
     governors = capture(
         ["bash", "-lc", "cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null | sort -u"]
     ).splitlines()
@@ -518,6 +561,148 @@ def derive_sampling_plan(
     }
 
 
+def derive_scaling_plan(
+    server_cpu_text: str, client_cpu_text: str,
+    worker_points: tuple[int, ...] = (1, 2, 4, 8),
+) -> dict[str, object]:
+    server_cpus = sorted(parse_cpu_set(server_cpu_text))
+    client_cpus = sorted(parse_cpu_set(client_cpu_text))
+    points = tuple(sorted(set(worker_points)))
+    if not server_cpus or not client_cpus:
+        raise RuntimeError("scaling CPU sets must be non-empty")
+    if set(server_cpus) & set(client_cpus):
+        raise RuntimeError("scaling server and client CPU sets must be disjoint")
+    if not points or points[0] != 1 or any(point < 1 for point in points):
+        raise RuntimeError("scaling worker points must be positive and include one worker")
+    if points[-1] > len(server_cpus):
+        raise RuntimeError(
+            f"scaling point {points[-1]} requires at least {points[-1]} server CPUs"
+        )
+    return {
+        "schema": 1,
+        "server_cpu_pool": cpu_set_text(set(server_cpus)),
+        "client_cpu_pool": cpu_set_text(set(client_cpus)),
+        "points": [
+            {
+                "workers": workers,
+                "server_cpu": cpu_set_text(set(server_cpus[:workers])),
+                "client_cpu": cpu_set_text(
+                    set(client_cpus[:min(workers, len(client_cpus))])
+                ),
+                "client_threads": min(workers, len(client_cpus)),
+            }
+            for workers in points
+        ],
+    }
+
+
+def summarize_scaling(
+    point_payloads: list[dict[str, object]], *,
+    max_client_utilization_percent: float = 85.0,
+) -> dict[str, object]:
+    if not 0.0 < max_client_utilization_percent < 100.0:
+        raise RuntimeError("scaling client utilization limit must be between 0 and 100")
+    errors: list[str] = []
+    rows: list[dict[str, object]] = []
+    expected_engines: set[str] | None = None
+    seen_workers: set[int] = set()
+    for payload in sorted(point_payloads, key=lambda item: int(item.get("workers", 0))):
+        workers = int(payload.get("workers", 0))
+        if workers < 1 or workers in seen_workers:
+            errors.append(f"invalid or duplicate scaling worker point: {workers}")
+            continue
+        seen_workers.add(workers)
+        engines = {str(item["engine"]) for item in payload.get("results", [])}
+        if expected_engines is None:
+            expected_engines = engines
+        elif engines != expected_engines:
+            errors.append(f"workers={workers} engine set differs: {sorted(engines)}")
+        sustainable = [
+            item for item in payload.get("stability", []) if item.get("sustainable")
+        ]
+        best_by_engine: dict[str, dict[str, object]] = {}
+        for item in sustainable:
+            engine = str(item["engine"])
+            if (
+                engine not in best_by_engine
+                or float(item.get("median_rps", 0.0))
+                > float(best_by_engine[engine].get("median_rps", 0.0))
+            ):
+                best_by_engine[engine] = item
+        for engine in sorted(engines):
+            stability = best_by_engine.get(engine)
+            if stability is None:
+                errors.append(f"workers={workers} engine={engine} has no sustainable point")
+                continue
+            connections = int(stability["connections"])
+            samples = [
+                item for item in payload.get("results", [])
+                if item.get("valid") and str(item.get("engine")) == engine
+                and int(item.get("connections", -1)) == connections
+            ]
+            client_values = [
+                float(item["client_cpu_utilization_percent"])
+                for item in samples
+                if item.get("client_cpu_utilization_percent") is not None
+            ]
+            cpu_values = [
+                float(item["server_cpu_ns_per_request"])
+                for item in samples if item.get("server_cpu_ns_per_request") is not None
+            ]
+            cv = stability.get("cv_percent")
+            qualified = (
+                len(samples) >= 5 and cv is not None and float(cv) <= 5.0
+                and len(client_values) == len(samples)
+                and max(client_values, default=100.0) <= max_client_utilization_percent
+            )
+            if not qualified:
+                errors.append(
+                    f"workers={workers} engine={engine} fails runs/CV/client-headroom gate"
+                )
+            rows.append({
+                "engine": engine,
+                "table": samples[0].get("table", "unknown") if samples else "unknown",
+                "workers": workers,
+                "server_cpu": payload.get("server_cpu"),
+                "client_cpu": payload.get("client_cpu"),
+                "client_threads": payload.get("client_threads"),
+                "connections": connections,
+                "rps": float(stability.get("median_rps", 0.0)),
+                "rps_cv_percent": float(cv) if cv is not None else None,
+                "runs": len(samples),
+                "server_cpu_ns_per_request": (
+                    statistics.median(cpu_values) if cpu_values else None
+                ),
+                "client_cpu_utilization_percent": (
+                    statistics.median(client_values) if client_values else None
+                ),
+                "client_cpu_utilization_max_percent": (
+                    max(client_values) if client_values else None
+                ),
+                "qualified": qualified,
+            })
+    if 1 not in seen_workers:
+        errors.append("scaling evidence has no one-worker baseline")
+    baselines = {row["engine"]: row for row in rows if row["workers"] == 1}
+    for row in rows:
+        baseline = baselines.get(row["engine"])
+        baseline_rps = float(baseline["rps"]) if baseline else 0.0
+        speedup = float(row["rps"]) / baseline_rps if baseline_rps > 0.0 else None
+        row["speedup"] = speedup
+        row["scaling_efficiency_percent"] = (
+            speedup / int(row["workers"]) * 100.0 if speedup is not None else None
+        )
+        row["rps_per_worker"] = float(row["rps"]) / int(row["workers"])
+    return {
+        "schema": 1,
+        "valid": bool(rows) and not errors and all(bool(row["qualified"]) for row in rows),
+        "max_client_utilization_percent": max_client_utilization_percent,
+        "worker_points": sorted(seen_workers),
+        "errors": errors,
+        "rows": rows,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("smoke", "exploratory", "qualification", "canonical"))
@@ -530,6 +715,11 @@ def main() -> int:
 
     strict = args.mode == "canonical"
     publication_data = args.mode in ("qualification", "canonical")
+    scaling_requested = os.environ.get("LUMINA_BENCH_V1_ENABLE_SCALING") == "1"
+    if scaling_requested and not publication_data:
+        raise RuntimeError(
+            "multi-worker scaling is a publication supplement; use qualification or canonical"
+        )
     manifest_command = [
         sys.executable,
         str(HERE / "manifest.py"),
@@ -787,7 +977,7 @@ def main() -> int:
         "manifest": "passed", "artifacts": "passed", "micro": "passed",
         "lumina_crs": "not-run",
         "coraza_crs": "not-run", "outcome_matrix": "not-run", "e2e": "not-run",
-        "overhead": "not-run",
+        "overhead": "not-run", "scaling": "not-requested",
     }
     if publication_data:
         parity_env = env.copy()
@@ -855,7 +1045,7 @@ def main() -> int:
     matrix = json.loads((result / "correctness_matrix/results.json").read_text(encoding="utf-8"))
     phases["outcome_matrix"] = "passed" if matrix["valid"] else "invalid"
 
-    e2e_common = [
+    e2e_base = [
         sys.executable,
         str(HERE / "e2e.py"),
         "--library-path",
@@ -866,6 +1056,9 @@ def main() -> int:
         os.environ.get("LUMINA_BENCH_V1_WRK", shutil.which("wrk") or "wrk"),
         "--wrk2",
         os.environ.get("LUMINA_BENCH_V1_WRK2", shutil.which("wrk2") or "wrk2"),
+    ]
+    e2e_common = [
+        *e2e_base,
         "--server-cpu",
         os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1"),
         "--client-cpu",
@@ -953,6 +1146,86 @@ def main() -> int:
     phases["e2e"] = (
         "passed" if fixed_results["valid"] and saturation_results["valid"] else "invalid"
     )
+
+    scaling_qualification: dict[str, object] = {
+        "schema": 1,
+        "requested": scaling_requested,
+        "valid": False,
+        "reason": "multi-worker scaling was not requested",
+    }
+    if scaling_requested:
+        worker_points = tuple(
+            int(value) for value in os.environ.get(
+                "LUMINA_BENCH_V1_SCALING_WORKERS", "1,2,4,8"
+            ).split(",") if value
+        )
+        scaling_plan = derive_scaling_plan(
+            os.environ.get("LUMINA_BENCH_V1_SCALING_SERVER_CPU", ""),
+            os.environ.get("LUMINA_BENCH_V1_SCALING_CLIENT_CPU", ""),
+            worker_points,
+        )
+        scaling_plan["duration"] = os.environ.get(
+            "LUMINA_BENCH_V1_SCALING_DURATION", "30s"
+        )
+        scaling_plan["repetitions"] = int(repetitions)
+        scaling_plan["connection_sweep"] = os.environ.get(
+            "LUMINA_BENCH_V1_SCALING_CONNECTION_SWEEP", "10,50,100,200"
+        )
+        scaling_plan["max_client_utilization_percent"] = float(
+            os.environ.get("LUMINA_BENCH_V1_SCALING_MAX_CLIENT_UTILIZATION", "85")
+        )
+        scaling_plan["estimated_wall_seconds"] = (
+            duration_seconds(str(scaling_plan["duration"]))
+            * int(scaling_plan["repetitions"])
+            * len(scaling_plan["points"])
+            * len(str(scaling_plan["connection_sweep"]).split(","))
+            * 5
+        )
+        scaling_root = result / "e2e_scaling"
+        scaling_root.mkdir()
+        (scaling_root / "plan.json").write_text(
+            json.dumps(scaling_plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        point_payloads: list[dict[str, object]] = []
+        for point in scaling_plan["points"]:
+            workers = int(point["workers"])
+            point_dir = scaling_root / f"workers_{workers:02d}"
+            execute(
+                [
+                    *e2e_base,
+                    "--canonical",
+                    "--mode", "saturation",
+                    "--output", str(point_dir),
+                    "--duration", str(scaling_plan["duration"]),
+                    "--repetitions", repetitions,
+                    "--threads", str(point["client_threads"]),
+                    "--workers", str(workers),
+                    "--server-cpu", str(point["server_cpu"]),
+                    "--client-cpu", str(point["client_cpu"]),
+                    "--connections-sweep", str(scaling_plan["connection_sweep"]),
+                ],
+                cwd=ROOT,
+                log=scaling_root / f"workers_{workers:02d}.log",
+                env=env,
+            )
+            point_payloads.append(
+                json.loads((point_dir / "results.json").read_text(encoding="utf-8"))
+            )
+        scaling_qualification = summarize_scaling(
+            point_payloads,
+            max_client_utilization_percent=float(
+                scaling_plan["max_client_utilization_percent"]
+            ),
+        )
+        scaling_qualification["requested"] = True
+        scaling_qualification["plan"] = scaling_plan
+        (scaling_root / "results.json").write_text(
+            json.dumps(scaling_qualification, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        phases["scaling"] = (
+            "passed" if scaling_qualification["valid"] else "invalid"
+        )
 
     overhead_common = [*e2e_common, "--adapter-set", "overhead"]
     overhead_saturation_duration = os.environ.get(
@@ -1045,6 +1318,8 @@ def main() -> int:
         "manifest", "artifacts", "micro", "lumina_crs", "coraza_crs",
         "outcome_matrix", "e2e", "overhead",
     )
+    if scaling_requested:
+        required_phase_names += ("scaling",)
     engineering_phase_names = (
         required_phase_names if publication_data
         else ("manifest", "artifacts", "micro", "outcome_matrix", "e2e", "overhead")
@@ -1058,6 +1333,7 @@ def main() -> int:
         and bool(artifact_postflight["valid"])
         and fixed_results["valid"] and saturation_results["valid"]
         and overhead_fixed["valid"] and overhead_saturation["valid"]
+        and (not scaling_requested or bool(scaling_qualification["valid"]))
         and all(phases[name] == "passed" for name in required_phase_names)
     )
     reason = (
@@ -1083,6 +1359,7 @@ def main() -> int:
         "overhead_pmu_qualification": overhead_pmu_qualification,
         "sampling_plan": sampling_plan,
         "overhead_sampling_plan": overhead_plan,
+        "scaling_qualification": scaling_qualification,
         "phases": phases,
     }
     (result / "run_manifest.json").write_text(
