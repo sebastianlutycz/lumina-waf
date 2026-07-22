@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(lumina-waf VERSION 0.4.1 LANGUAGES CXX C)
+project(lumina-waf VERSION 0.4.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -135,7 +135,7 @@ if(UNIX AND NOT APPLE)
     if(LUMINA_LOCAL_FUNCTION_BINDING)
         # LuminaWAF does not support interposing its internal calls. Binding
         # functions locally removes avoidable PLT/GOT traffic while retaining
-        # the current dynamic symbol set for the v0.4.1 ABI review.
+        # the current dynamic symbol set for the v0.4.0 RC ABI review.
         target_link_options(luminawaf PRIVATE -Wl,-Bsymbolic-functions)
 
         if(CMAKE_READELF)

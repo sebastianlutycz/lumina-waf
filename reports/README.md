@@ -2,7 +2,7 @@
 
 This directory is reserved for immutable V1.0 Protocol benchmark evidence tied to a released
 LuminaWAF commit.
-The repository currently contains no RC benchmark bundle because the final `v0.4.0-rc.1` evidence
+The repository currently contains no RC benchmark bundle because the final `v0.4.0-rc.4` evidence
 must be collected from the exact tagged source state.
 
 ## Layout
@@ -12,7 +12,7 @@ Publication bundles use a versioned path:
 ```text
 reports/
 └── benchmark_harness_v1/
-    └── v0.4.0-rc.1/
+    └── v0.4.0-rc.4/
         ├── BENCHMARK_RESULTS.md
         ├── artifacts.json
         ├── correctness_lumina.json

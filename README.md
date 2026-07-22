@@ -118,7 +118,7 @@ They apply only to the exact:
 * qualification class.
 
 Neither the pre-RC qualification nor the smoke observations are the publication result for
-`v0.4.0-rc.1`. They were collected on a shared Intel Haswell host without full kernel CPU isolation.
+`v0.4.0-rc.4`. They were collected on a shared Intel Haswell host without full kernel CPU isolation.
 The final report must be regenerated from the exact tagged source state and will remain
 `NON-CANONICAL` unless every canonical host gate passes.
 
