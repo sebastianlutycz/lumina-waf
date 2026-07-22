@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(lumina-waf VERSION 0.4.0 LANGUAGES CXX C)
+project(lumina-waf VERSION 0.4.1 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # instruction sets. Native tuning is explicit because published artifacts must
 # not silently depend on the CPU that happened to build them.
 option(LUMINA_NATIVE_TUNING "Enable -march=native for a host-local build" OFF)
+option(LUMINA_LOCAL_FUNCTION_BINDING
+    "Bind calls between functions defined by libluminawaf locally on ELF platforms"
+    ON)
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" LUMINA_SYSTEM_PROCESSOR)
 set(LUMINA_ARCH_COMPILE_OPTIONS)
 if(LUMINA_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
@@ -129,6 +132,24 @@ if(UNIX AND NOT APPLE)
     # not consume libstdc++ symbols. Drop unused driver defaults and reject any
     # unresolved internal ABI at link time.
     target_link_options(luminawaf PRIVATE -Wl,--as-needed,-z,defs)
+    if(LUMINA_LOCAL_FUNCTION_BINDING)
+        # LuminaWAF does not support interposing its internal calls. Binding
+        # functions locally removes avoidable PLT/GOT traffic while retaining
+        # the current dynamic symbol set for the v0.4.1 ABI review.
+        target_link_options(luminawaf PRIVATE -Wl,-Bsymbolic-functions)
+
+        if(CMAKE_READELF)
+            set(LUMINA_READELF "${CMAKE_READELF}")
+        else()
+            find_program(LUMINA_READELF NAMES llvm-readelf readelf REQUIRED)
+        endif()
+        add_custom_command(TARGET luminawaf POST_BUILD
+            COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_luminawaf_elf.py
+                --binary $<TARGET_FILE:luminawaf>
+                --readelf ${LUMINA_READELF}
+            COMMENT "Verifying LuminaWAF ELF ABI and local function binding"
+            VERBATIM)
+    endif()
 endif()
 
 # Test bit-perfect parity was removed because lumina_unescape_uri_avx2 is no longer exported.
