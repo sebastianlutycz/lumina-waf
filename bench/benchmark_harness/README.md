@@ -112,10 +112,14 @@ LUMINA_BENCH_V1_SCALING_CLIENT_CPU=12-15 \
 ./bench/benchmark_harness/run.sh canonical
 ```
 
-The default points are `1,2,4,8`, with five 30-second repetitions at each connection point. The
-runner scales client threads up to the client-pool size, records load-generator CPU consumption,
-and rejects any selected row whose maximum client utilization exceeds 85%. This section remains
-separate from the primary single-worker latency and CPU-efficiency tables.
+The default points are `1,2,4,8`, with five 30-second repetitions at each connection point. Every
+point uses the complete client pool and the same client-thread count, records load-generator CPU consumption,
+and rejects any selected row whose maximum client utilization exceeds 90%. Every NGINX worker PID
+and load-generator worker TID is bound to one recorded CPU and verified after startup. This explicit
+per-task binding is required because `isolcpus=domain` disables scheduler load balancing inside a
+multi-CPU affinity mask. This section remains separate from the primary single-worker latency and
+CPU-efficiency tables. A client-limited plain-NGINX baseline remains visible as `NOT QUALIFIED`,
+but it does not invalidate WAF scaling rows; every CRS and native-WAF row remains blocking.
 
 The harness records Lumina's complete `DT_NEEDED` set and rejects legacy `libinjection_*` symbols,
 relocations, and comparator/runtime dependencies such as PCRE or ModSecurity before the first

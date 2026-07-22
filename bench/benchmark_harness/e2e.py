@@ -34,6 +34,14 @@ class Adapter:
     original_port: int | None = None
 
 
+@dataclass(frozen=True)
+class LoadRun:
+    returncode: int
+    stdout: str
+    stderr: str
+    thread_affinity: list[dict[str, Any]]
+
+
 def parse_cpu_set(value: str) -> list[int]:
     cpus: set[int] = set()
     for part in value.split(","):
@@ -53,6 +61,69 @@ def parse_cpu_set(value: str) -> list[int]:
 def child_cpu_seconds() -> float:
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     return usage.ru_utime + usage.ru_stime
+
+
+def bind_tasks_to_cpus(task_ids: list[int], cpus: list[int], role: str) -> list[dict[str, Any]]:
+    if not task_ids:
+        raise RuntimeError(f"cannot bind an empty {role} task set")
+    if len(task_ids) != len(cpus):
+        raise RuntimeError(
+            f"{role} tasks ({len(task_ids)}) do not match allocated CPUs ({len(cpus)})"
+        )
+    mapping: list[dict[str, Any]] = []
+    for task_id, cpu in zip(sorted(task_ids), cpus, strict=True):
+        os.sched_setaffinity(task_id, {cpu})
+        observed = sorted(os.sched_getaffinity(task_id))
+        if observed != [cpu]:
+            raise RuntimeError(
+                f"{role} task {task_id} affinity {observed} does not match CPU {cpu}"
+            )
+        mapping.append({"task_id": task_id, "cpu": cpu, "role": role})
+    return mapping
+
+
+def process_threads(pid: int) -> list[int]:
+    try:
+        return sorted(
+            int(path.name) for path in Path(f"/proc/{pid}/task").iterdir()
+            if path.name.isdigit() and int(path.name) != pid
+        )
+    except OSError:
+        return []
+
+
+def pin_load_generator_threads(
+    process: subprocess.Popen[str], cpus: list[int], expected_threads: int,
+) -> list[dict[str, Any]]:
+    deadline = time.monotonic() + 5.0
+    worker_threads: list[int] = []
+    while time.monotonic() < deadline:
+        worker_threads = process_threads(process.pid)
+        if len(worker_threads) == expected_threads:
+            break
+        if len(worker_threads) > expected_threads:
+            raise RuntimeError(
+                f"load generator created {len(worker_threads)} worker threads; "
+                f"expected {expected_threads}"
+            )
+        if process.poll() is not None:
+            raise RuntimeError("load generator exited before affinity was assigned")
+        time.sleep(0.001)
+    if len(worker_threads) != expected_threads:
+        raise RuntimeError(
+            f"load generator exposed {len(worker_threads)} worker threads; "
+            f"expected {expected_threads}"
+        )
+    os.sched_setaffinity(process.pid, {cpus[0]})
+    main_affinity = sorted(os.sched_getaffinity(process.pid))
+    if main_affinity != [cpus[0]]:
+        raise RuntimeError(
+            f"load-generator main task affinity {main_affinity} does not match CPU {cpus[0]}"
+        )
+    return [
+        {"task_id": process.pid, "cpu": cpus[0], "role": "client-main"},
+        *bind_tasks_to_cpus(worker_threads, cpus, "client-worker"),
+    ]
 
 
 def prepare_prefix(prefix: Path = PREFIX, workload: Path = DEFAULT_WORKLOAD) -> None:
@@ -217,7 +288,15 @@ class NginxLeg:
         self.config = config
         self.port = port
         self.server_cpu = server_cpu
+        self.server_cpus = parse_cpu_set(server_cpu)
         config_text = config.read_text(encoding="utf-8")
+        worker_match = re.search(r"^worker_processes\s+([0-9]+);", config_text, re.MULTILINE)
+        if not worker_match:
+            raise RuntimeError("rendered NGINX config has no numeric worker_processes value")
+        self.workers = int(worker_match.group(1))
+        if self.workers > len(self.server_cpus):
+            raise RuntimeError("NGINX workers exceed the server CPU allocation")
+        self.worker_affinity: list[dict[str, Any]] = []
         pid_match = re.search(r"^pid\s+([^;]+);", config_text, re.MULTILINE)
         if not pid_match:
             raise RuntimeError("rendered NGINX config has no pid path")
@@ -243,6 +322,30 @@ class NginxLeg:
             ["taskset", "-c", self.server_cpu, *self.command()], env=self.env,
             check=True, capture_output=True, text=True,
         )
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            try:
+                master = int(self.pid_file.read_text(encoding="ascii").strip())
+                children = Path(f"/proc/{master}/task/{master}/children")
+                workers = [
+                    int(value) for value in children.read_text(encoding="ascii").split()
+                ]
+            except (OSError, ValueError):
+                workers = []
+            if len(workers) == self.workers:
+                self.worker_affinity = bind_tasks_to_cpus(
+                    workers, self.server_cpus[:self.workers], "nginx-worker"
+                )
+                break
+            if len(workers) > self.workers:
+                raise RuntimeError(
+                    f"NGINX exposed {len(workers)} direct children; expected {self.workers}"
+                )
+            time.sleep(0.01)
+        if len(self.worker_affinity) != self.workers:
+            raise RuntimeError(
+                f"NGINX exposed {len(self.worker_affinity)} workers; expected {self.workers}"
+            )
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             try:
@@ -285,7 +388,10 @@ class NginxLeg:
 
 
 def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: int,
-            connections: int, rate: int | None, script: Path) -> subprocess.CompletedProcess[str]:
+            connections: int, rate: int | None, script: Path) -> LoadRun:
+    client_cpus = parse_cpu_set(client_cpu)
+    if threads > len(client_cpus):
+        raise RuntimeError("load-generator threads exceed the client CPU allocation")
     command = [
         "taskset", "-c", client_cpu, str(binary), f"-t{threads}", f"-c{connections}",
         f"-d{duration}", "-L", "-s", str(script),
@@ -293,7 +399,17 @@ def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: in
     if rate is not None:
         command.append(f"-R{rate}")
     command.append(f"http://127.0.0.1:{port}")
-    return subprocess.run(command, check=False, capture_output=True, text=True)
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    try:
+        affinity = pin_load_generator_threads(process, client_cpus, threads)
+        stdout, stderr = process.communicate()
+    except BaseException:
+        process.terminate()
+        process.communicate()
+        raise
+    return LoadRun(process.returncode, stdout, stderr, affinity)
 
 
 def write_wrk_script(workload: Path, destination: Path) -> int:
@@ -454,6 +570,7 @@ def main() -> int:
                     elif response_contract != expected_response_contract:
                         contract_errors.append("allow response status/body hash differs across adapters")
                     warmup_raw = None
+                    warmup_client_thread_affinity = None
                     if args.mode == "fixed":
                         warmup_path = args.output / (
                             f"warmup_{repetition:02d}_{connections}_{adapter.name}.txt"
@@ -466,6 +583,7 @@ def main() -> int:
                             warmup.stdout + warmup.stderr, encoding="utf-8"
                         )
                         warmup_raw = warmup_path.name
+                        warmup_client_thread_affinity = warmup.thread_affinity
                         if warmup.returncode != 0:
                             contract_errors.append(
                                 f"fixed-rate warmup exit={warmup.returncode}"
@@ -501,6 +619,9 @@ def main() -> int:
                             "server_cpu_count": len(server_cpus),
                             "client_cpu_count": len(client_cpus),
                             "client_cpu_seconds": client_cpu_seconds,
+                            "nginx_worker_affinity": leg.worker_affinity,
+                            "client_thread_affinity": process.thread_affinity,
+                            "warmup_client_thread_affinity": warmup_client_thread_affinity,
                             "client_cpu_utilization_percent": (
                                 client_cpu_seconds
                                 / (parse_duration_seconds(args.duration) * len(client_cpus))

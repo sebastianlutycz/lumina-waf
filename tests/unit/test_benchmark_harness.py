@@ -336,13 +336,43 @@ Requests/sec: 10000.10
                 e2e_module.write_wrk_script(workload, root / "workload.lua")
 
     def test_wrk_command_does_not_inject_headers_outside_the_workload(self):
-        with mock.patch("subprocess.run") as run:
-            e2e_module.run_wrk(
+        with mock.patch("subprocess.Popen") as popen, mock.patch.object(
+            e2e_module, "pin_load_generator_threads", return_value=[]
+        ):
+            process = popen.return_value
+            process.communicate.return_value = ("", "")
+            process.returncode = 0
+            result = e2e_module.run_wrk(
                 Path("/tmp/wrk"), "2", 19090, "1s", 1, 10, 100,
                 Path("/tmp/workload.lua"),
             )
-        command = run.call_args.args[0]
+        command = popen.call_args.args[0]
         self.assertNotIn("-H", command)
+        self.assertEqual(command.count("/tmp/wrk"), 1)
+        self.assertEqual(result.returncode, 0)
+
+    def test_task_affinity_binds_one_task_per_cpu_and_verifies_it(self):
+        with mock.patch("os.sched_setaffinity") as set_affinity, mock.patch(
+            "os.sched_getaffinity", side_effect=({4}, {5})
+        ):
+            mapping = e2e_module.bind_tasks_to_cpus(
+                [202, 101], [4, 5], "nginx-worker"
+            )
+        self.assertEqual(
+            set_affinity.call_args_list,
+            [mock.call(101, {4}), mock.call(202, {5})],
+        )
+        self.assertEqual(
+            mapping,
+            [
+                {"task_id": 101, "cpu": 4, "role": "nginx-worker"},
+                {"task_id": 202, "cpu": 5, "role": "nginx-worker"},
+            ],
+        )
+
+    def test_task_affinity_rejects_shared_cpu_mapping(self):
+        with self.assertRaisesRegex(RuntimeError, "do not match allocated CPUs"):
+            e2e_module.bind_tasks_to_cpus([101, 202], [4], "nginx-worker")
 
     def test_direct_comparators_check_intervention_after_every_phase(self):
         source = (ROOT / "bench/benchmark_harness/lumina_benchmark_harness.cpp").read_text(
@@ -617,8 +647,8 @@ Requests/sec: 9999.90
         self.assertEqual(
             plan["points"],
             [
-                {"workers": 1, "server_cpu": "4", "client_cpu": "12", "client_threads": 1},
-                {"workers": 2, "server_cpu": "4,5", "client_cpu": "12,13", "client_threads": 2},
+                {"workers": 1, "server_cpu": "4", "client_cpu": "12,13,14,15", "client_threads": 4},
+                {"workers": 2, "server_cpu": "4,5", "client_cpu": "12,13,14,15", "client_threads": 4},
                 {"workers": 4, "server_cpu": "4,5,6,7", "client_cpu": "12,13,14,15", "client_threads": 4},
                 {"workers": 8, "server_cpu": "4,5,6,7,8,9,10,11", "client_cpu": "12,13,14,15", "client_threads": 4},
             ],
@@ -676,10 +706,34 @@ Requests/sec: 9999.90
         )
 
         saturated = run_module.summarize_scaling([
-            point(1, [995, 1000, 1001, 1002, 1005], 90.0)
+            point(1, [995, 1000, 1001, 1002, 1005], 95.0)
         ])
         self.assertFalse(saturated["valid"])
         self.assertTrue(any("client-headroom" in error for error in saturated["errors"]))
+
+        diagnostic = point(1, [995, 1000, 1001, 1002, 1005], 40.0)
+        baseline_rates = [1990, 2000, 2002, 2004, 2010]
+        for repetition, rate in enumerate(baseline_rates):
+            diagnostic["results"].append({
+                "engine": "baseline", "table": "baseline", "valid": True,
+                "connections": 100, "repetition": repetition,
+                "requests_per_second": rate,
+                "server_cpu_ns_per_request": 20_000,
+                "client_cpu_utilization_percent": 95.0,
+            })
+        diagnostic["stability"].append({
+            "engine": "baseline", "connections": 100,
+            "valid_runs": 5, "median_rps": 2002,
+            "cv_percent": 0.4, "sustainable": True,
+        })
+        baseline_limited = run_module.summarize_scaling([diagnostic])
+        self.assertTrue(baseline_limited["valid"])
+        baseline = next(
+            row for row in baseline_limited["rows"] if row["engine"] == "baseline"
+        )
+        self.assertFalse(baseline["qualified"])
+        self.assertEqual(baseline["qualification_scope"], "diagnostic")
+        self.assertTrue(any("baseline" in item for item in baseline_limited["warnings"]))
 
     def test_artifact_validation_rejects_post_measurement_drift(self):
         with tempfile.TemporaryDirectory() as directory:

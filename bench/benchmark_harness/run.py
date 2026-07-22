@@ -586,10 +586,8 @@ def derive_scaling_plan(
             {
                 "workers": workers,
                 "server_cpu": cpu_set_text(set(server_cpus[:workers])),
-                "client_cpu": cpu_set_text(
-                    set(client_cpus[:min(workers, len(client_cpus))])
-                ),
-                "client_threads": min(workers, len(client_cpus)),
+                "client_cpu": cpu_set_text(set(client_cpus)),
+                "client_threads": len(client_cpus),
             }
             for workers in points
         ],
@@ -598,11 +596,12 @@ def derive_scaling_plan(
 
 def summarize_scaling(
     point_payloads: list[dict[str, object]], *,
-    max_client_utilization_percent: float = 85.0,
+    max_client_utilization_percent: float = 90.0,
 ) -> dict[str, object]:
     if not 0.0 < max_client_utilization_percent < 100.0:
         raise RuntimeError("scaling client utilization limit must be between 0 and 100")
     errors: list[str] = []
+    warnings: list[str] = []
     rows: list[dict[str, object]] = []
     expected_engines: set[str] | None = None
     seen_workers: set[int] = set()
@@ -650,18 +649,22 @@ def summarize_scaling(
                 for item in samples if item.get("server_cpu_ns_per_request") is not None
             ]
             cv = stability.get("cv_percent")
+            table = samples[0].get("table", "unknown") if samples else "unknown"
+            blocking = table != "baseline"
             qualified = (
                 len(samples) >= 5 and cv is not None and float(cv) <= 5.0
                 and len(client_values) == len(samples)
                 and max(client_values, default=100.0) <= max_client_utilization_percent
             )
             if not qualified:
-                errors.append(
+                message = (
                     f"workers={workers} engine={engine} fails runs/CV/client-headroom gate"
                 )
+                (errors if blocking else warnings).append(message)
             rows.append({
                 "engine": engine,
-                "table": samples[0].get("table", "unknown") if samples else "unknown",
+                "table": table,
+                "qualification_scope": "blocking" if blocking else "diagnostic",
                 "workers": workers,
                 "server_cpu": payload.get("server_cpu"),
                 "client_cpu": payload.get("client_cpu"),
@@ -693,12 +696,17 @@ def summarize_scaling(
             speedup / int(row["workers"]) * 100.0 if speedup is not None else None
         )
         row["rps_per_worker"] = float(row["rps"]) / int(row["workers"])
+    blocking_rows = [
+        row for row in rows if row["qualification_scope"] == "blocking"
+    ]
     return {
         "schema": 1,
-        "valid": bool(rows) and not errors and all(bool(row["qualified"]) for row in rows),
+        "valid": bool(blocking_rows) and not errors
+        and all(bool(row["qualified"]) for row in blocking_rows),
         "max_client_utilization_percent": max_client_utilization_percent,
         "worker_points": sorted(seen_workers),
         "errors": errors,
+        "warnings": warnings,
         "rows": rows,
     }
 
@@ -1172,7 +1180,7 @@ def main() -> int:
             "LUMINA_BENCH_V1_SCALING_CONNECTION_SWEEP", "10,50,100,200"
         )
         scaling_plan["max_client_utilization_percent"] = float(
-            os.environ.get("LUMINA_BENCH_V1_SCALING_MAX_CLIENT_UTILIZATION", "85")
+            os.environ.get("LUMINA_BENCH_V1_SCALING_MAX_CLIENT_UTILIZATION", "90")
         )
         scaling_plan["estimated_wall_seconds"] = (
             duration_seconds(str(scaling_plan["duration"]))

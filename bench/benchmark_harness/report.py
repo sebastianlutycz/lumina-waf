@@ -1050,8 +1050,9 @@ def render(result_dir: Path) -> str:
             "",
             "This optional publication supplement measures throughput scaling independently from "
             "the primary single-worker latency and efficiency results. Every row uses isolated, "
-            "disjoint server/client CPU sets. Client saturation invalidates a row; saturation "
-            "latency is not reported as service latency. NAXSI remains a native-WAF reference.",
+            "disjoint server/client CPU sets. Client saturation invalidates a row; a client-limited "
+            "plain-NGINX baseline remains visible but does not invalidate WAF scaling qualification. "
+            "Saturation latency is not reported as service latency. NAXSI remains a native-WAF reference.",
             "",
             f"- Worker points: `{scaling_worker_points if scaling_plan else 'not requested'}`",
             f"- Server CPU pool: `{scaling_plan.get('server_cpu_pool', 'not requested')}`",

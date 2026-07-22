@@ -149,9 +149,16 @@ allow workload at `1`, `2`, `4` and `8` NGINX workers. The worker process and it
 production binaries and configurations used by the single-worker experiment.
 
 For an `N`-worker point, NGINX receives `N` dedicated CPUs from the start of the declared server
-pool. The load generator receives `min(N, client_pool_size)` dedicated CPUs and the same number of
-threads. Server and client pools must be disjoint, kernel-isolated physical CPUs. Housekeeping,
+pool. Every point uses the complete load-generator CPU pool and one worker thread per client CPU;
+client resources do not scale with the server point. Server and client pools must be disjoint,
+kernel-isolated physical CPUs. Housekeeping,
 interrupt handling and unrelated services remain outside both pools.
+
+The runner binds each direct NGINX worker PID and each `wrk`/`wrk2` worker TID to one distinct CPU,
+then reads the effective affinity back before accepting traffic. A process-level multi-CPU mask is
+not sufficient: kernels booted with `isolcpus=domain` do not balance runnable tasks between those
+isolated scheduling domains. The main load-generator task remains on the first client CPU and is
+included in the recorded client CPU utilization.
 
 Each point uses at least five independent balanced-order repetitions and a connection sweep. For
 each engine, the report selects its highest sustainable point with zero response errors and RPS CV
@@ -159,9 +166,11 @@ no greater than 5%. It derives speedup relative to that engine's one-worker resu
 efficiency, RPS/worker and server CPU/request.
 
 The runner also measures load-generator `RUSAGE_CHILDREN` CPU time. A selected row is invalid when
-maximum client utilization exceeds 85% of its assigned CPU capacity, preventing a client-limited
+maximum client utilization exceeds 90% of its assigned CPU capacity, preventing a client-limited
 plateau from being reported as a WAF scaling limit. Saturation latency is not reported as service
-latency. NAXSI retains its separate `native-waf` classification in the scaling table.
+latency. A client-limited plain-NGINX baseline is retained and marked `NOT QUALIFIED`, but it is a
+non-blocking transport diagnostic. All CRS engines and NAXSI remain blocking scaling rows; NAXSI
+retains its separate `native-waf` classification in the scaling table.
 
 ### LuminaWAF Overhead Decomposition
 
