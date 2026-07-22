@@ -17,6 +17,13 @@ SPEC.loader.exec_module(TRANSLATOR)
 
 
 class SidecarTranslatorTest(unittest.TestCase):
+    def test_first_byte_mask_density_requires_every_byte(self):
+        dense = [[0, 1] for _ in range(256)]
+        sparse = [row[:] for row in dense]
+        sparse[255] = [0, 0]
+        self.assertTrue(TRANSLATOR.first_byte_mask_is_dense(dense))
+        self.assertFalse(TRANSLATOR.first_byte_mask_is_dense(sparse))
+
     @staticmethod
     def _generated_u64_rows(source, symbol):
         match = re.search(

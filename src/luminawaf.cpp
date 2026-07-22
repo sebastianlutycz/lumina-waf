@@ -157,16 +157,49 @@ static inline void lumina_build_short_rule_active_mask(LuminaShortRuleActiveMask
     m->posN = m->fallback_posN;
 }
 
+typedef struct {
+    uint64_t pos0[CRS_SHORT_RULE_MASK_DIMS];
+    uint64_t posN[CRS_SHORT_RULE_MASK_DIMS];
+} LuminaShortRuleEffectiveMask;
+
+static inline void lumina_build_short_rule_effective_mask(
+        LuminaShortRuleEffectiveMask *effective,
+        const LuminaShortRuleActiveMask *active,
+        const uint64_t *eligibility_mask,
+        const uint64_t *disabled_mask) {
+    for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word) {
+        const uint64_t eligible = eligibility_mask
+                                      ? eligibility_mask[word] : UINT64_MAX;
+        const uint64_t enabled = eligible & ~disabled_mask[word];
+        effective->pos0[word] = active->pos0[word] & enabled;
+        effective->posN[word] = active->posN[word] & enabled;
+    }
+}
+
+static inline bool lumina_has_short_rule_candidate(
+        const unsigned char *data, size_t len) {
+#if LUMINA_SHORT_RULE_FIRST_BYTE_MASK_DENSE
+    (void)data;
+    return len != 0;
+#else
+    for (size_t offset = 0; offset < len; ++offset) {
+        const uint8_t first = data[offset];
+        for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word) {
+            if (g_short_rule_mask[first][word] != 0) return true;
+        }
+    }
+    return false;
+#endif
+}
+
 #if LUMINA_SHARED_ROUTER_COUNT > 0
 static inline void lumina_run_shared_router(
         int router_id, const unsigned char *data, size_t len, size_t offset,
-        const uint64_t *active_mask, const uint64_t *eligibility_mask,
-        const uint64_t *disabled_mask, uint64_t *matched) {
+        const uint64_t *effective_mask, uint64_t *matched) {
     uint64_t wanted[CRS_SHORT_RULE_MASK_DIMS];
     for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word) {
-        uint64_t eligible = eligibility_mask ? eligibility_mask[word] : UINT64_MAX;
         wanted[word] = g_shared_router_rule_mask[router_id][word] &
-                       active_mask[word] & eligible & ~disabled_mask[word];
+                       effective_mask[word];
     }
     lumina_dispatch_shared_router(
         router_id, data, len, offset, wanted, matched);
@@ -472,15 +505,8 @@ static int luminawaf_inspect_scratchpad(unsigned char* scratchpad, size_t decode
     }
     bool is_uri_path = ((active_scope & LUMINA_SCOPE_URI) && decoded_len > 0 && scratchpad[0] == '/');
 
-    /* Generated rules are first-byte routed. At least one byte must be present
-     * in the generated mask before entering their dispatch loop. */
-    bool has_short_rule_candidate = false;
-    for (size_t _k = 0; _k < decoded_len && !has_short_rule_candidate; _k++) {
-        uint8_t _fb = scratchpad[_k];
-        for (int _w = 0; _w < CRS_SHORT_RULE_MASK_DIMS; _w++) {
-            if (g_short_rule_mask[_fb][_w]) { has_short_rule_candidate = true; break; }
-        }
-    }
+    const bool has_short_rule_candidate =
+        lumina_has_short_rule_candidate(scratchpad, decoded_len);
 
     if (!has_danger && !is_uri_path && !has_short_rule_candidate) {
         if (out_result) {
@@ -565,12 +591,14 @@ static int luminawaf_inspect_scratchpad(unsigned char* scratchpad, size_t decode
     if (!threat) {
         LuminaShortRuleActiveMask short_active;
         lumina_build_short_rule_active_mask(&short_active, active_scope, hdr_presence_mask, var_type);
+        LuminaShortRuleEffectiveMask effective;
+        lumina_build_short_rule_effective_mask(
+            &effective, &short_active, NULL, disabled_mask);
 
         if (decoded_len > 0) {
             uint8_t c = scratchpad[0];
             for (int _w = 0; _w < CRS_SHORT_RULE_MASK_DIMS && !threat; _w++) {
-                uint64_t mw = g_short_rule_mask[c][_w] & short_active.pos0[_w] &
-                              ~disabled_mask[_w];
+                uint64_t mw = g_short_rule_mask[c][_w] & effective.pos0[_w];
                 while (mw) {
                     int idx = __builtin_ctzll(mw) + (_w << 6);
                     mw &= mw - 1;
@@ -595,8 +623,7 @@ static int luminawaf_inspect_scratchpad(unsigned char* scratchpad, size_t decode
             for (size_t j = i; j < i + 16 && j < decoded_len; j++) {
                 uint8_t c = scratchpad[j];
                 for (int _w = 0; _w < CRS_SHORT_RULE_MASK_DIMS && !threat; _w++) {
-                    uint64_t mw = g_short_rule_mask[c][_w] & short_active.posN[_w] &
-                                  ~disabled_mask[_w];
+                    uint64_t mw = g_short_rule_mask[c][_w] & effective.posN[_w];
                         while (mw) {
                             int idx = __builtin_ctzll(mw) + (_w << 6);
                             mw &= mw - 1;
@@ -728,6 +755,9 @@ static int lumina_scan_projected_value_masked(const unsigned char *data, size_t 
     lumina_build_disabled_mask(state, collection_mask, disabled_mask);
     LuminaShortRuleActiveMask active;
     lumina_build_short_rule_active_mask(&active, scope, header_mask, var_type);
+    LuminaShortRuleEffectiveMask effective;
+    lumina_build_short_rule_effective_mask(
+        &effective, &active, eligibility_mask, disabled_mask);
     int threat = 0;
 
     uint8_t first = data[0];
@@ -735,9 +765,7 @@ static int lumina_scan_projected_value_masked(const unsigned char *data, size_t 
     uint8_t processed_routers[LUMINA_SHARED_ROUTER_COUNT] = {};
 #endif
     for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; word++) {
-        uint64_t eligible = eligibility_mask ? eligibility_mask[word] : UINT64_MAX;
-        uint64_t candidates = g_short_rule_mask[first][word] & active.pos0[word] & eligible &
-                              ~disabled_mask[word];
+        uint64_t candidates = g_short_rule_mask[first][word] & effective.pos0[word];
         while (candidates) {
             int idx = __builtin_ctzll(candidates) + (word << 6);
             candidates &= candidates - 1;
@@ -751,8 +779,7 @@ static int lumina_scan_projected_value_masked(const unsigned char *data, size_t 
                 processed_routers[router_id] = 1;
                 uint64_t matched[CRS_SHORT_RULE_MASK_DIMS];
                 lumina_run_shared_router(
-                    router_id, data, len, 0, active.pos0, eligibility_mask,
-                    disabled_mask, matched);
+                    router_id, data, len, 0, effective.pos0, matched);
                 for (int hit_word = 0; hit_word < CRS_SHORT_RULE_MASK_DIMS; ++hit_word) {
                     uint64_t hits = matched[hit_word];
                     while (hits) {
@@ -788,9 +815,7 @@ static int lumina_scan_projected_value_masked(const unsigned char *data, size_t 
     for (size_t offset = 1; offset < len; offset++) {
         uint8_t byte = data[offset];
         for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; word++) {
-            uint64_t eligible = eligibility_mask ? eligibility_mask[word] : UINT64_MAX;
-            uint64_t candidates = g_short_rule_mask[byte][word] & active.posN[word] & eligible &
-                                  ~disabled_mask[word];
+            uint64_t candidates = g_short_rule_mask[byte][word] & effective.posN[word];
             while (candidates) {
                 int idx = __builtin_ctzll(candidates) + (word << 6);
                 candidates &= candidates - 1;
@@ -1552,12 +1577,13 @@ static int lumina_audit_scan_variable(const BundleVar *var, LuminaRuleState *sta
     uint32_t header_mask = (var->var_type == LUMINA_VAR_HDR) ? var->header_mask : 0;
     lumina_build_short_rule_active_mask(
         &active, var->scope, header_mask, (uint8_t)var->var_type);
+    LuminaShortRuleEffectiveMask effective;
+    lumina_build_short_rule_effective_mask(
+        &effective, &active, eligibility_mask, disabled_mask);
 
     uint8_t first = decoded[0];
     for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; word++) {
-        uint64_t eligible = eligibility_mask ? eligibility_mask[word] : UINT64_MAX;
-        uint64_t candidates = g_short_rule_mask[first][word] & active.pos0[word] & eligible &
-                              ~disabled_mask[word];
+        uint64_t candidates = g_short_rule_mask[first][word] & effective.pos0[word];
         while (candidates) {
             int idx = __builtin_ctzll(candidates) + (word << 6);
             candidates &= candidates - 1;
@@ -1578,9 +1604,7 @@ static int lumina_audit_scan_variable(const BundleVar *var, LuminaRuleState *sta
     for (size_t offset = 1; offset < decoded_len; offset++) {
         uint8_t byte = decoded[offset];
         for (int word = 0; word < CRS_SHORT_RULE_MASK_DIMS; word++) {
-            uint64_t eligible = eligibility_mask ? eligibility_mask[word] : UINT64_MAX;
-            uint64_t candidates = g_short_rule_mask[byte][word] & active.posN[word] & eligible &
-                                  ~disabled_mask[word];
+            uint64_t candidates = g_short_rule_mask[byte][word] & effective.posN[word];
             while (candidates) {
                 int idx = __builtin_ctzll(candidates) + (word << 6);
                 candidates &= candidates - 1;
@@ -1899,14 +1923,8 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
         }
         bool is_uri_path = (v->scope & LUMINA_SCOPE_URI) && data_len > 0 && data_ptr[0] == '/';
 
-        /* Check the generated first-byte mask before entering rule dispatch. */
-        bool has_short_rule_candidate = false;
-        for (size_t _k = 0; _k < data_len && !has_short_rule_candidate; _k++) {
-            uint8_t _fb = data_ptr[_k];
-            for (int _w = 0; _w < CRS_SHORT_RULE_MASK_DIMS; _w++) {
-                if (g_short_rule_mask[_fb][_w]) { has_short_rule_candidate = true; break; }
-            }
-        }
+        const bool has_short_rule_candidate =
+            lumina_has_short_rule_candidate(data_ptr, data_len);
 
         /* Null-byte fallback: if %00 was detected in raw data but prefilter
          * finds no danger (e.g. pure null-byte payloads like "+%00" after
@@ -2008,6 +2026,9 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
             const uint64_t *generated_eligibility =
                 scan_form_body && v->var_type == LUMINA_VAR_BODY
                     ? g_short_rule_request_body_mask : NULL;
+            LuminaShortRuleEffectiveMask effective;
+            lumina_build_short_rule_effective_mask(
+                &effective, &short_active, generated_eligibility, disabled_mask);
 
             if (data_len > 0) {
                 uint8_t c = data_ptr[0];
@@ -2015,10 +2036,7 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
                 uint8_t processed_routers[LUMINA_SHARED_ROUTER_COUNT] = {};
 #endif
                 for (int _w = 0; _w < CRS_SHORT_RULE_MASK_DIMS && !threat; _w++) {
-                    uint64_t eligible = generated_eligibility
-                                            ? generated_eligibility[_w] : UINT64_MAX;
-                    uint64_t mw = g_short_rule_mask[c][_w] & short_active.pos0[_w] & eligible &
-                                  ~disabled_mask[_w];
+                    uint64_t mw = g_short_rule_mask[c][_w] & effective.pos0[_w];
                     while (mw) {
                         int idx = __builtin_ctzll(mw) + (_w << 6);
                         mw &= mw - 1;
@@ -2031,8 +2049,8 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
                             processed_routers[router_id] = 1;
                             uint64_t matched[CRS_SHORT_RULE_MASK_DIMS];
                             lumina_run_shared_router(
-                                router_id, data_ptr, data_len, 0, short_active.pos0,
-                                generated_eligibility, disabled_mask, matched);
+                                router_id, data_ptr, data_len, 0,
+                                effective.pos0, matched);
                             for (int hit_word = 0;
                                  hit_word < CRS_SHORT_RULE_MASK_DIMS && !threat;
                                  ++hit_word) {
@@ -2073,10 +2091,7 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
                 for (size_t j = i; j < i + 16 && j < data_len; j++) {
                     uint8_t c = data_ptr[j];
                     for (int _w = 0; _w < CRS_SHORT_RULE_MASK_DIMS && !threat; _w++) {
-                        uint64_t eligible = generated_eligibility
-                                                ? generated_eligibility[_w] : UINT64_MAX;
-                        uint64_t mw = g_short_rule_mask[c][_w] & short_active.posN[_w] & eligible &
-                                      ~disabled_mask[_w];
+                        uint64_t mw = g_short_rule_mask[c][_w] & effective.posN[_w];
                         while (mw) {
                             int idx = __builtin_ctzll(mw) + (_w << 6);
                             mw &= mw - 1;

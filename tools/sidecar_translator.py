@@ -1516,6 +1516,11 @@ def transform_aware_first_bytes(pattern, transforms):
     return result
 
 
+def first_byte_mask_is_dense(mask):
+    """Return true when every byte routes to at least one generated rule."""
+    return all(any(words) for words in mask)
+
+
 def transform_requires_offset_zero(transforms):
     """Return true when transformed first bytes cannot be derived from raw bytes."""
     normalized = {
@@ -8117,7 +8122,7 @@ def main():
             if idx < 64 * NWORDS:
                 mask[b][idx >> 6] |= (1 << (idx & 63))
 
-    n = len(detection)
+    first_byte_mask_dense = first_byte_mask_is_dense(mask)
 
     anywhere_mask = [0] * NWORDS
     empty_mask = [0] * NWORDS
@@ -8510,6 +8515,8 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
     hdr += f"#define LUMINA_SHORT_RULE_COUNT {n}\n"
     hdr += f"#define LUMINA_GENERATED_VAR_TYPE_SLOTS {VAR_TYPE_SLOTS}\n"
     hdr += f"#define LUMINA_HEADER_SELECTOR_SLOTS {HEADER_SELECTOR_SLOTS}\n"
+    hdr += ("#define LUMINA_SHORT_RULE_FIRST_BYTE_MASK_DENSE "
+            f"{1 if first_byte_mask_dense else 0}\n")
     hdr += f"extern const uint64_t g_short_rule_mask[256][{NWORDS}];\n"
     hdr += f"extern const uint64_t g_short_rule_anywhere_mask[{NWORDS}];\n"
     hdr += f"extern const uint64_t g_short_rule_empty_mask[{NWORDS}];\n"
