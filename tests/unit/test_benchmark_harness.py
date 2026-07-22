@@ -303,7 +303,7 @@ Requests/sec: 10000.10
         raw = """
   100001 requests in 10.00s
 Requests/sec: 10000.10
-Socket errors: connect 1, read 2, write 3, timeout 4
+  Socket errors: connect 1, read 2, write 3, timeout 4
 """
         parsed = e2e_module.parse_wrk(raw, requested_rate=None, min_samples=0)
         self.assertFalse(parsed["valid"])
@@ -318,7 +318,7 @@ Socket errors: connect 1, read 2, write 3, timeout 4
         raw = """
   100001 requests in 10.00s
 Requests/sec: 10000.10
-Socket errors: timeout unknown
+  Socket errors: timeout unknown
 """
         parsed = e2e_module.parse_wrk(raw, requested_rate=None, min_samples=0)
         self.assertFalse(parsed["valid"])

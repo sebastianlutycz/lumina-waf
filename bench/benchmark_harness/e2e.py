@@ -257,7 +257,7 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
     requests_match = re.search(r"\b([0-9]+) requests in\b", text)
     rate_match = re.search(r"^Requests/sec:\s*([0-9.]+)", text, re.MULTILINE)
     errors_match = re.search(r"Non-2xx or 3xx responses:\s*([0-9]+)", text)
-    socket_line = re.search(r"^Socket errors:\s*(.+)$", text, re.MULTILINE)
+    socket_line = re.search(r"^\s*Socket errors:\s*(.+)$", text, re.MULTILINE)
     socket_error_breakdown = {
         name: int(value)
         for name, value in re.findall(
