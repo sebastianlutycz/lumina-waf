@@ -655,15 +655,20 @@ static int luminawaf_inspect_scratchpad(unsigned char* scratchpad, size_t decode
     return 0;
 }
 
-static inline void bundle_sort_by_length(LuminaBundle *b) {
-    for (int i = 1; i < b->count; i++) {
-        BundleVar tmp = b->vars[i];
+static inline void bundle_build_length_order(
+        const LuminaBundle *bundle,
+        uint8_t order[LUMINA_BUNDLE_MAX_VARS]) {
+    for (int i = 0; i < bundle->count; ++i) order[i] = (uint8_t)i;
+
+    for (int i = 1; i < bundle->count; ++i) {
+        const uint8_t current = order[i];
+        const size_t current_len = bundle->vars[current].len;
         int j = i - 1;
-        while (j >= 0 && b->vars[j].len > tmp.len) {
-            b->vars[j + 1] = b->vars[j];
-            j--;
+        while (j >= 0 && bundle->vars[order[j]].len > current_len) {
+            order[j + 1] = order[j];
+            --j;
         }
-        b->vars[j + 1] = tmp;
+        order[j + 1] = current;
     }
 }
 
@@ -1763,7 +1768,8 @@ int luminawaf_inspect_tx(const LuminaBundle *bundle, LuminaRuleState *state, Lum
 }
 
 int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state, LuminaResult *out_result) {
-    if (!bundle || !out_result || bundle->count == 0) return -1;
+    if (!bundle || !out_result || bundle->count < 1 ||
+        bundle->count > LUMINA_BUNDLE_MAX_VARS) return -1;
 
     LuminaRuleState fallback_state = {};
     if (!state) state = &fallback_state;
@@ -1772,8 +1778,8 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
     g_anomaly_category_tls = 0;
     /* Generated phase controls run before metadata and content evaluation. */
     int threat = lumina_eval_tx_rules(bundle, state);
-    LuminaBundle sorted = *bundle;
-    bundle_sort_by_length(&sorted);
+    uint8_t var_order[LUMINA_BUNDLE_MAX_VARS];
+    bundle_build_length_order(bundle, var_order);
 
     /* Evaluate method, request-line, protocol and header-count rules from the
      * transaction metadata that is not available to per-value scanners. */
@@ -1813,8 +1819,8 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
 
     static thread_local unsigned char scratchpad[131072];
 
-    for (int vi = 0; vi < sorted.count && threat == 0; vi++) {
-        const BundleVar *v = &sorted.vars[vi];
+    for (int vi = 0; vi < bundle->count && threat == 0; vi++) {
+        const BundleVar *v = &bundle->vars[var_order[vi]];
         uint64_t collection_mask = v->collection_mask
                                        ? v->collection_mask
                                        : lumina_collection_mask_for_var_type(
@@ -1835,8 +1841,8 @@ int luminawaf_inspect_bundle(const LuminaBundle *bundle, LuminaRuleState *state,
         if (v->var_type == LUMINA_VAR_ARGS || v->var_type == LUMINA_VAR_COOKIE) continue;
         if (scan_structured_body && v->var_type == LUMINA_VAR_BODY) continue;
 
-        if (vi + 1 < sorted.count) {
-            __builtin_prefetch(sorted.vars[vi + 1].ptr, 0, 3);
+        if (vi + 1 < bundle->count) {
+            __builtin_prefetch(bundle->vars[var_order[vi + 1]].ptr, 0, 3);
         }
 
         const unsigned char *data_ptr = v->ptr;

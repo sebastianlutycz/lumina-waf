@@ -117,8 +117,10 @@ typedef struct {
     size_t name_len;
 } BundleVar;
 
+#define LUMINA_BUNDLE_MAX_VARS 16
+
 typedef struct {
-    BundleVar vars[16];
+    BundleVar vars[LUMINA_BUNDLE_MAX_VARS];
     int count;
     uint32_t hdr_presence_mask;
     /* C4 STRUCTURAL: discrete CRS collections that are NOT part of the

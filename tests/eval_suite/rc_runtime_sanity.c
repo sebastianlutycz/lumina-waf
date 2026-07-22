@@ -77,14 +77,33 @@ static int check_metadata_without_uri(void) {
            luminawaf_rule_state_matched(&state, 911100) == 1;
 }
 
+static int check_bundle_count_bounds(void) {
+    static const unsigned char value[] = "x";
+    LuminaBundle bundle;
+    LuminaRuleState state;
+    LuminaResult result;
+
+    memset(&bundle, 0, sizeof(bundle));
+    memset(&state, 0, sizeof(state));
+    memset(&result, 0, sizeof(result));
+    bundle.vars[0].ptr = value;
+    bundle.vars[0].len = sizeof(value) - 1;
+    bundle.count = LUMINA_BUNDLE_MAX_VARS + 1;
+
+    if (luminawaf_inspect_bundle(&bundle, &state, &result) != -1) return 0;
+    bundle.count = -1;
+    return luminawaf_inspect_bundle(&bundle, &state, &result) == -1;
+}
+
 int main(void) {
     int passed = 0;
 
     passed += check_worker_lifecycle();
     passed += check_one_byte_generated_rule();
     passed += check_metadata_without_uri();
+    passed += check_bundle_count_bounds();
 
-    printf("RC runtime sanity: %d/3 passed\n", passed);
+    printf("RC runtime sanity: %d/4 passed\n", passed);
     luminawaf_destroy_worker();
-    return passed == 3 ? 0 : 1;
+    return passed == 4 ? 0 : 1;
 }
