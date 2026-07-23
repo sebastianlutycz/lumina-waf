@@ -24,6 +24,13 @@ ALLOWED_MARKDOWN_PATTERNS = (
     re.compile(
         r"^reports/benchmark_harness_v1/v\d+\.\d+\.\d+(?:-rc\.\d+)?/BENCHMARK_RESULTS\.md$"
     ),
+    re.compile(
+        r"^reports/canonical/v\d+\.\d+\.\d+(?:-rc\.\d+)?/"
+        r"(?:README|BENCHMARK_RESULTS)\.md$"
+    ),
+    re.compile(
+        r"^reports/canonical/v\d+\.\d+\.\d+(?:-rc\.\d+)?/RAW/README\.md$"
+    ),
 )
 FORBIDDEN_EXACT = {
     "CHANGELOG.md",
@@ -46,7 +53,7 @@ FORBIDDEN_PREFIXES = (
     "tests/eval_suite/corpus/",
     "third_party/libinjection/",
 )
-FORBIDDEN_SUFFIXES = (".o", ".so", ".pyc", ".tar.gz")
+FORBIDDEN_SUFFIXES = (".o", ".so", ".pyc", ".tar.gz", ".tar.zst", ".zip")
 RULE_FILE_RE = re.compile(r"(?:^|/)(?:REQUEST|RESPONSE)-[^/]+\.conf$")
 PARSER_CHUNK_RE = re.compile(r"^src/parser_rules_[0-9]+\.c$")
 

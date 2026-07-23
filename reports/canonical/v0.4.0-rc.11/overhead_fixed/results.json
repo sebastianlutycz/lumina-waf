@@ -1,0 +1,1834 @@
+{
+  "adapter_set": "overhead",
+  "canonical_requested": true,
+  "client_cpu": "9-10",
+  "client_cpu_count": 2,
+  "client_thread_policy": "min(configured_threads, connections)",
+  "client_threads": 2,
+  "connection_points": [
+    10
+  ],
+  "coverage_valid": true,
+  "duration": "22s",
+  "expected_results": 15,
+  "identity_errors": [],
+  "infrastructure_invalid_legs": [],
+  "mode": "fixed",
+  "observed_results": 15,
+  "overload_invalid_legs": [],
+  "requested_rate": 5623,
+  "results": [
+    {
+      "accepted_requests": 123649,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3476410000000003,
+      "client_cpu_utilization_percent": 7.608275000000001,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176200
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176201
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176202
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1610.0,
+        "p50": 731.0,
+        "p90": 1210.0,
+        "p99": 1360.0,
+        "p99_9": 1510.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176196
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "baseline",
+        "luminawaf-loaded-off",
+        "luminawaf"
+      ],
+      "raw": "fixed_00_10_baseline.txt",
+      "repetition": 0,
+      "requests": 123649,
+      "requests_per_second": 5620.51,
+      "round_id": "overhead-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25475.337447128564,
+      "server_cpu_seconds": 3.15,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176197
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176198
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176199
+        }
+      ],
+      "warmup_raw": "warmup_00_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123645,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.351502,
+      "client_cpu_utilization_percent": 7.61705,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176222
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176223
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176224
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "4e30d56ef61bf34ad408f29301a814feb2856314049edaa819933188f18730ad",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf-loaded-off",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1580.0,
+        "p50": 736.0,
+        "p90": 1190.0,
+        "p99": 1350.0,
+        "p99_9": 1430.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176218
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "baseline",
+        "luminawaf-loaded-off",
+        "luminawaf"
+      ],
+      "raw": "fixed_00_10_luminawaf-loaded-off.txt",
+      "repetition": 0,
+      "requests": 123645,
+      "requests_per_second": 5620.26,
+      "round_id": "overhead-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25718.79170205022,
+      "server_cpu_seconds": 3.1799999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176219
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176220
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176221
+        }
+      ],
+      "warmup_raw": "warmup_00_10_luminawaf-loaded-off.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123644,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3562770000000004,
+      "client_cpu_utilization_percent": 7.627902272727273,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176239
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176240
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176241
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2940.0,
+        "p50": 1100.0,
+        "p90": 1770.0,
+        "p99": 2220.0,
+        "p99_9": 2510.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176235
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "baseline",
+        "luminawaf-loaded-off",
+        "luminawaf"
+      ],
+      "raw": "fixed_00_10_luminawaf.txt",
+      "repetition": 0,
+      "requests": 123644,
+      "requests_per_second": 5620.28,
+      "round_id": "overhead-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 115816.37604736179,
+      "server_cpu_seconds": 14.32,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176236
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176237
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176238
+        }
+      ],
+      "warmup_raw": "warmup_00_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123646,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.343744000000001,
+      "client_cpu_utilization_percent": 7.599418181818184,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176382
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176383
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176384
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "4e30d56ef61bf34ad408f29301a814feb2856314049edaa819933188f18730ad",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf-loaded-off",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1600.0,
+        "p50": 735.0,
+        "p90": 1200.0,
+        "p99": 1360.0,
+        "p99_9": 1500.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176378
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf-loaded-off",
+        "luminawaf",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_luminawaf-loaded-off.txt",
+      "repetition": 1,
+      "requests": 123646,
+      "requests_per_second": 5620.32,
+      "round_id": "overhead-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25475.955550523267,
+      "server_cpu_seconds": 3.15,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176379
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176380
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176381
+        }
+      ],
+      "warmup_raw": "warmup_01_10_luminawaf-loaded-off.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123648,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3592590000000015,
+      "client_cpu_utilization_percent": 7.634679545454549,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176398
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176399
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176400
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 3130.0,
+        "p50": 1130.0,
+        "p90": 1890.0,
+        "p99": 2360.0,
+        "p99_9": 2650.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176394
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf-loaded-off",
+        "luminawaf",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_luminawaf.txt",
+      "repetition": 1,
+      "requests": 123648,
+      "requests_per_second": 5620.27,
+      "round_id": "overhead-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 116459.62732919253,
+      "server_cpu_seconds": 14.399999999999999,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176395
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176396
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176397
+        }
+      ],
+      "warmup_raw": "warmup_01_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123645,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.358502999999999,
+      "client_cpu_utilization_percent": 7.632961363636361,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176448
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176449
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176450
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1610.0,
+        "p50": 732.0,
+        "p90": 1200.0,
+        "p99": 1350.0,
+        "p99_9": 1490.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176410
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "luminawaf-loaded-off",
+        "luminawaf",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_baseline.txt",
+      "repetition": 1,
+      "requests": 123645,
+      "requests_per_second": 5620.3,
+      "round_id": "overhead-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25395.284888187954,
+      "server_cpu_seconds": 3.1399999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176411
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176412
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176413
+        }
+      ],
+      "warmup_raw": "warmup_01_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123644,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3591750000000005,
+      "client_cpu_utilization_percent": 7.6344886363636375,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176558
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176559
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176560
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2990.0,
+        "p50": 1120.0,
+        "p90": 1800.0,
+        "p99": 2310.0,
+        "p99_9": 2510.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176554
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf",
+        "baseline",
+        "luminawaf-loaded-off"
+      ],
+      "raw": "fixed_02_10_luminawaf.txt",
+      "repetition": 2,
+      "requests": 123644,
+      "requests_per_second": 5620.25,
+      "round_id": "overhead-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 114926.72511403708,
+      "server_cpu_seconds": 14.209999999999999,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176555
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176556
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176557
+        }
+      ],
+      "warmup_raw": "warmup_02_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123648,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3493289999999973,
+      "client_cpu_utilization_percent": 7.612111363636358,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176572
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176573
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176574
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1560.0,
+        "p50": 734.0,
+        "p90": 1200.0,
+        "p99": 1350.0,
+        "p99_9": 1490.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176568
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "luminawaf",
+        "baseline",
+        "luminawaf-loaded-off"
+      ],
+      "raw": "fixed_02_10_baseline.txt",
+      "repetition": 2,
+      "requests": 123648,
+      "requests_per_second": 5620.28,
+      "round_id": "overhead-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25394.668737060038,
+      "server_cpu_seconds": 3.1399999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176569
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176570
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176571
+        }
+      ],
+      "warmup_raw": "warmup_02_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123647,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.331381999999998,
+      "client_cpu_utilization_percent": 7.571322727272722,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176709
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176710
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176711
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "4e30d56ef61bf34ad408f29301a814feb2856314049edaa819933188f18730ad",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf-loaded-off",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1550.0,
+        "p50": 734.0,
+        "p90": 1200.0,
+        "p99": 1320.0,
+        "p99_9": 1450.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176705
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf",
+        "baseline",
+        "luminawaf-loaded-off"
+      ],
+      "raw": "fixed_02_10_luminawaf-loaded-off.txt",
+      "repetition": 2,
+      "requests": 123647,
+      "requests_per_second": 5620.5,
+      "round_id": "overhead-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25718.375698561224,
+      "server_cpu_seconds": 3.1799999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176706
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176707
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176708
+        }
+      ],
+      "warmup_raw": "warmup_02_10_luminawaf-loaded-off.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123646,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3516779999999997,
+      "client_cpu_utilization_percent": 7.617449999999999,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176811
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176812
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176813
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2980.0,
+        "p50": 1100.0,
+        "p90": 1740.0,
+        "p99": 2210.0,
+        "p99_9": 2600.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176807
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf",
+        "luminawaf-loaded-off",
+        "baseline"
+      ],
+      "raw": "fixed_03_10_luminawaf.txt",
+      "repetition": 3,
+      "requests": 123646,
+      "requests_per_second": 5620.24,
+      "round_id": "overhead-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 115814.50269317244,
+      "server_cpu_seconds": 14.32,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176808
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176809
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176810
+        }
+      ],
+      "warmup_raw": "warmup_03_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123649,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3443359999999913,
+      "client_cpu_utilization_percent": 7.600763636363617,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176827
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176828
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176829
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "4e30d56ef61bf34ad408f29301a814feb2856314049edaa819933188f18730ad",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf-loaded-off",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1590.0,
+        "p50": 728.0,
+        "p90": 1190.0,
+        "p99": 1320.0,
+        "p99_9": 1460.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176823
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf",
+        "luminawaf-loaded-off",
+        "baseline"
+      ],
+      "raw": "fixed_03_10_luminawaf-loaded-off.txt",
+      "repetition": 3,
+      "requests": 123649,
+      "requests_per_second": 5620.4,
+      "round_id": "overhead-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25556.211534262304,
+      "server_cpu_seconds": 3.1599999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176824
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176825
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176826
+        }
+      ],
+      "warmup_raw": "warmup_03_10_luminawaf-loaded-off.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123645,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3597910000000013,
+      "client_cpu_utilization_percent": 7.63588863636364,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176970
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176971
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176972
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1570.0,
+        "p50": 737.0,
+        "p90": 1210.0,
+        "p99": 1370.0,
+        "p99_9": 1500.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176966
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "luminawaf",
+        "luminawaf-loaded-off",
+        "baseline"
+      ],
+      "raw": "fixed_03_10_baseline.txt",
+      "repetition": 3,
+      "requests": 123645,
+      "requests_per_second": 5620.34,
+      "round_id": "overhead-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25557.038295119088,
+      "server_cpu_seconds": 3.1599999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176967
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176968
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176969
+        }
+      ],
+      "warmup_raw": "warmup_03_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123645,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.365465999999998,
+      "client_cpu_utilization_percent": 7.648786363636359,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176985
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176986
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176987
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1590.0,
+        "p50": 737.0,
+        "p90": 1200.0,
+        "p99": 1380.0,
+        "p99_9": 1510.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 176980
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "luminawaf-loaded-off"
+      ],
+      "raw": "fixed_04_10_baseline.txt",
+      "repetition": 4,
+      "requests": 123645,
+      "requests_per_second": 5620.32,
+      "round_id": "overhead-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25476.161591653523,
+      "server_cpu_seconds": 3.15,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 176981
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 176982
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 176983
+        }
+      ],
+      "warmup_raw": "warmup_04_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123642,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.3580480000000037,
+      "client_cpu_utilization_percent": 7.631927272727281,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 177121
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 177122
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 177123
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 3080.0,
+        "p50": 1110.0,
+        "p90": 1820.0,
+        "p99": 2330.0,
+        "p99_9": 2650.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 177117
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "luminawaf-loaded-off"
+      ],
+      "raw": "fixed_04_10_luminawaf.txt",
+      "repetition": 4,
+      "requests": 123642,
+      "requests_per_second": 5620.14,
+      "round_id": "overhead-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 117112.30811536533,
+      "server_cpu_seconds": 14.48,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 177118
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 177119
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 177120
+        }
+      ],
+      "warmup_raw": "warmup_04_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 123644,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 3.349517999999996,
+      "client_cpu_utilization_percent": 7.6125409090909,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 177141
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 177142
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 177143
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "4e30d56ef61bf34ad408f29301a814feb2856314049edaa819933188f18730ad",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf-loaded-off",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1560.0,
+        "p50": 737.0,
+        "p90": 1200.0,
+        "p99": 1370.0,
+        "p99_9": 1500.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 177137
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "luminawaf-loaded-off"
+      ],
+      "raw": "fixed_04_10_luminawaf-loaded-off.txt",
+      "repetition": 4,
+      "requests": 123644,
+      "requests_per_second": 5620.32,
+      "round_id": "overhead-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 25557.244993691562,
+      "server_cpu_seconds": 3.1599999999999997,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "diagnostic",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 177138
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 177139
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 177140
+        }
+      ],
+      "warmup_raw": "warmup_04_10_luminawaf-loaded-off.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    }
+  ],
+  "schema": 1,
+  "server_cpu": "1",
+  "server_cpu_count": 1,
+  "stability": [
+    {
+      "connections": 10,
+      "cv_percent": 0.0016403861783174886,
+      "diagnostic_available": true,
+      "engine": "baseline",
+      "median_rps": 5620.32,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    },
+    {
+      "connections": 10,
+      "cv_percent": 0.001650004358349318,
+      "diagnostic_available": true,
+      "engine": "luminawaf-loaded-off",
+      "median_rps": 5620.32,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    },
+    {
+      "connections": 10,
+      "cv_percent": 0.0009954457948504183,
+      "diagnostic_available": true,
+      "engine": "luminawaf",
+      "median_rps": 5620.25,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    }
+  ],
+  "stability_valid": true,
+  "valid": true,
+  "warmup_duration": "1s",
+  "workers": 1,
+  "workload": "/srv/lumina-canonical/LuminaWAF/bench/benchmark_harness/workloads/requests.json",
+  "workload_allow_requests": 6,
+  "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+}

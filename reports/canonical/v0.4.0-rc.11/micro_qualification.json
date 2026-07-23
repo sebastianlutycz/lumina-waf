@@ -1,0 +1,64 @@
+{
+  "cpu_set": "1",
+  "errors": [],
+  "processes": [
+    {
+      "path": "micro.json",
+      "raw_repetitions": {
+        "FullTransaction/Coraza/Allow": 10,
+        "FullTransaction/Coraza/Attack": 10,
+        "FullTransaction/LuminaWAF/Allow": 10,
+        "FullTransaction/LuminaWAF/Attack": 10,
+        "FullTransaction/ModSecurity/Allow": 10,
+        "FullTransaction/ModSecurity/Attack": 10
+      }
+    },
+    {
+      "path": "micro_process_01.json",
+      "raw_repetitions": {
+        "FullTransaction/Coraza/Allow": 10,
+        "FullTransaction/Coraza/Attack": 10,
+        "FullTransaction/LuminaWAF/Allow": 10,
+        "FullTransaction/LuminaWAF/Attack": 10,
+        "FullTransaction/ModSecurity/Allow": 10,
+        "FullTransaction/ModSecurity/Attack": 10
+      }
+    },
+    {
+      "path": "micro_process_02.json",
+      "raw_repetitions": {
+        "FullTransaction/Coraza/Allow": 10,
+        "FullTransaction/Coraza/Attack": 10,
+        "FullTransaction/LuminaWAF/Allow": 10,
+        "FullTransaction/LuminaWAF/Attack": 10,
+        "FullTransaction/ModSecurity/Allow": 10,
+        "FullTransaction/ModSecurity/Attack": 10
+      }
+    },
+    {
+      "path": "micro_process_03.json",
+      "raw_repetitions": {
+        "FullTransaction/Coraza/Allow": 10,
+        "FullTransaction/Coraza/Attack": 10,
+        "FullTransaction/LuminaWAF/Allow": 10,
+        "FullTransaction/LuminaWAF/Attack": 10,
+        "FullTransaction/ModSecurity/Allow": 10,
+        "FullTransaction/ModSecurity/Attack": 10
+      }
+    },
+    {
+      "path": "micro_process_04.json",
+      "raw_repetitions": {
+        "FullTransaction/Coraza/Allow": 10,
+        "FullTransaction/Coraza/Attack": 10,
+        "FullTransaction/LuminaWAF/Allow": 10,
+        "FullTransaction/LuminaWAF/Attack": 10,
+        "FullTransaction/ModSecurity/Allow": 10,
+        "FullTransaction/ModSecurity/Attack": 10
+      }
+    }
+  ],
+  "required_processes": 5,
+  "required_repetitions": 10,
+  "valid": true
+}

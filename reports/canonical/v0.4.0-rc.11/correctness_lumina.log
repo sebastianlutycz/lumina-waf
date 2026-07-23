@@ -1,0 +1,49 @@
+[100%] Built target luminawaf
+commit=2897a63
+branch=
+generated_rule_count=229
+library=/srv/lumina-canonical/LuminaWAF/build/libluminawaf.so
+timeout_seconds=600
+min_overall=99.70
+scope=inbound
+limit=full
+command=python3 /srv/lumina-canonical/LuminaWAF/tests/eval_suite/crs_parity_harness.py --scope inbound --json-output /srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/correctness_lumina.json
+elapsed: 5.6s  tests=3986
+scope=inbound files=289
+positive(block) : 98.33%  (3117/3170)
+positive(exact) : 99.72%  (3161/3170)
+negative(excl)  : 99.88%  (815/816)
+verdict(status) : 0.00%  (0/0)
+transport_skipped=22
+pl_skipped=635 target_pl=2
+config_skipped=6
+timeouts=0 exceptions=0
+OVERALL PARITY  : 99.75%
+
+failure kinds:
+  pos-wrong-rule: 9
+  neg-excluded-fired: 1
+
+failures=10 top rules:
+  rule 949110: 2
+  rule 920100: 1
+  rule 921250: 1
+  rule 922120: 1
+  rule 934120: 1
+  rule 942522: 1
+  rule 944150: 1
+  rule 944151: 1
+  rule 944200: 1
+
+top rule/kind/matched triples:
+  rule 920100 kind=pos-wrong-rule matched=934110: 1
+  rule 921250 kind=neg-excluded-fired matched=921250: 1
+  rule 922120 kind=pos-wrong-rule matched=922110: 1
+  rule 934120 kind=pos-wrong-rule matched=931130: 1
+  rule 942522 kind=pos-wrong-rule matched=942330: 1
+  rule 944150 kind=pos-wrong-rule matched=920420: 1
+  rule 944151 kind=pos-wrong-rule matched=920420: 1
+  rule 944200 kind=pos-wrong-rule matched=920451: 1
+  rule 949110 kind=pos-wrong-rule matched=931130: 1
+  rule 949110 kind=pos-wrong-rule matched=920100: 1
+CRS parity gate completed without harness timeouts/exceptions

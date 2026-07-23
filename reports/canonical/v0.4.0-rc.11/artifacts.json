@@ -1,0 +1,357 @@
+{
+  "baseline_nginx_config": {
+    "bytes": 456,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/nginx_baseline.conf",
+    "sha256": "ba573fd4244cb4f0b548de32576f353fdd41eb6c69879a46adc22dfaf0b81a2f"
+  },
+  "build_log": {
+    "bytes": 35423,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/build.log",
+    "sha256": "d8fd08bb38dc4d7fe8c77134653ce7da85fefc635db4cefedc9681e3f528010e"
+  },
+  "build_provenance": {
+    "bytes": 2043,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/build_provenance.json",
+    "sha256": "dc768c6a861d85d16952d8a6c94bd0459a5e1943b93a7cd46f3ea36586ef2285"
+  },
+  "cmake_cache": {
+    "bytes": 15598,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/CMakeCache.txt",
+    "sha256": "d942c7b51613918be4295d344b35363d9d7735d5e4b67d65636fed2cbd1a98a4"
+  },
+  "compile_commands": {
+    "bytes": 15085,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/compile_commands.json",
+    "sha256": "c651fc2f0680a7410539f0714146aeba208646b7e8e85cf5ad5af2de496dd58e"
+  },
+  "configure_log": {
+    "bytes": 128,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/configure.log",
+    "sha256": "7fc812fac371f2d6367699686a61fc6e7aae3ee27d6e8a16aad35f78d6f6353d"
+  },
+  "coraza": {
+    "bytes": 19718096,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/prefix/lib/libcoraza.so",
+    "sha256": "31bf593766db4dca2ab2473f04a41562a994bd2496b5b1e5f2bbee6f266e43f7"
+  },
+  "coraza_config": {
+    "bytes": 2227,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/coraza_crs_pl2.conf",
+    "sha256": "3a4dcb6eedde3653a609245f6fcfd78592d9211b08cbed41e3ec1b9cec3bad73"
+  },
+  "coraza_nginx_config": {
+    "bytes": 709,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/nginx_coraza.conf",
+    "sha256": "b3ccfdc8bfcf790bd80a52f3e07390e1158c6c3efdb766fd2c9ff6b75eadd684"
+  },
+  "coraza_nginx_module": {
+    "bytes": 273336,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/sources/nginx-1.30.4/objs/ngx_http_coraza_module.so",
+    "sha256": "2c73b9e982903e30bfa01514babd66310bc5aeaaaa12c7ea0c001fca98192335"
+  },
+  "crs_data_000": {
+    "bytes": 1802,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/ai-critical-artifacts.data",
+    "sha256": "9352bbfff2c5dd86311dfbefaf76a71597402a2eba9cad33bc736b3d2560311a"
+  },
+  "crs_data_001": {
+    "bytes": 3755,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/asp-dotnet-errors.data",
+    "sha256": "a3bb53002692e86fdb06e7045b64bc8f7c74972f824106f566ec48bd528884aa"
+  },
+  "crs_data_002": {
+    "bytes": 4441,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/iis-errors.data",
+    "sha256": "3eac5008e5dee373d0b876e92405af04cc4ce0f73625e7510499f708b516aa40"
+  },
+  "crs_data_003": {
+    "bytes": 2157,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/java-classes.data",
+    "sha256": "e939e4af2b219a695f84d905cae484698718beabc0efdbe4236ae1d8dc9e2ca3"
+  },
+  "crs_data_004": {
+    "bytes": 18343,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/lfi-os-files.data",
+    "sha256": "84669b74e47faba9f67e1187a5c5f53469722e6025e7482d4eecb918365ab67e"
+  },
+  "crs_data_005": {
+    "bytes": 75735,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/php-errors.data",
+    "sha256": "7e3824d3cca836dfaa8f69c53a0f7864b1c6667374b8e8e85f6c52cecd2c86e6"
+  },
+  "crs_data_006": {
+    "bytes": 3332,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/php-function-names-933150.data",
+    "sha256": "ba322a02f1d9150c7f5b57a04a6986fcf4b21bde7322255c2790e610b09a59c1"
+  },
+  "crs_data_007": {
+    "bytes": 610,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/php-variables.data",
+    "sha256": "07ffd3c28d5d79e18e3844352fc3dd122af7e0037dbfebe6ed4dad403e9a95de"
+  },
+  "crs_data_008": {
+    "bytes": 11008,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/restricted-files.data",
+    "sha256": "ec748c0cb8dc63661d873498d4d39c03fc90a61b09a5418065de30f25b9e4fa0"
+  },
+  "crs_data_009": {
+    "bytes": 6928,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/restricted-upload.data",
+    "sha256": "ae69b132c08eb819a7369803bd5d48be709f95f9772710422383f81d273bd1a6"
+  },
+  "crs_data_010": {
+    "bytes": 2802,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/ruby-errors.data",
+    "sha256": "caf826022886052069d54946b3f8f6608b5672225db203a448589bd2bfc195a1"
+  },
+  "crs_data_011": {
+    "bytes": 3921,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/scanners-user-agents.data",
+    "sha256": "efdb35b4df7c076ebe5324c81b42e3579766c4f36356241cc483d7971a319ab5"
+  },
+  "crs_data_012": {
+    "bytes": 4363,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/sql-errors.data",
+    "sha256": "ba9f3f7070f4c2c6c2d6165da06566f18aee19756c510ccde99aeff57fd5ca1a"
+  },
+  "crs_data_013": {
+    "bytes": 1085,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/ssrf-no-scheme.data",
+    "sha256": "753805c3b3284a28c2d834c9ce32aab8f3d24257e66c2d64b3308bd8f4aacbd4"
+  },
+  "crs_data_014": {
+    "bytes": 5428,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/ssrf.data",
+    "sha256": "6305d2a07d3b7997112358a38986fe30c55faa11f9002c3479a687a718bfc66a"
+  },
+  "crs_data_015": {
+    "bytes": 192,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/unix-shell-aliases.data",
+    "sha256": "7860d692ba74be8465972e1c348d06b9ba41f61243406cfc7fed82db6fc26bee"
+  },
+  "crs_data_016": {
+    "bytes": 138,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/unix-shell-builtins.data",
+    "sha256": "7c7b600b457b06940a440095cf594f0e28de1891020de9840fc9ea7cf1e00e57"
+  },
+  "crs_data_017": {
+    "bytes": 8550,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/unix-shell.data",
+    "sha256": "30b49ed5e34d7ef2f5afc74f8ca21baec6a3b44a8c6d15082d2ff1bc6d456fa1"
+  },
+  "crs_data_018": {
+    "bytes": 1067,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/web-shells-asp.data",
+    "sha256": "4ebbd5ab8fe4d10f18dd69b56e9e935eb861c1bf327893532221578feaa5c0cc"
+  },
+  "crs_data_019": {
+    "bytes": 8438,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/web-shells-php.data",
+    "sha256": "9e67cf50981651658292031edd32fb0a8c2c761de8778a02f8539d6dd61d1341"
+  },
+  "crs_data_020": {
+    "bytes": 7222,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/windows-powershell-commands.data",
+    "sha256": "5055ffeb4ce22869dee0f611045991e64365e980bba68649f4468aea86476d93"
+  },
+  "crs_include_000": {
+    "bytes": 38628,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/crs-setup.conf",
+    "sha256": "94ef00b2a4038dc6d9d8eb0754b30d3dc8dea94f1c1720fdc41d38d1ba786a20"
+  },
+  "crs_include_001": {
+    "bytes": 15958,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-901-INITIALIZATION.conf",
+    "sha256": "31ab1866ff57da953b6f1c905eb8d1aa7aa9fd95c6215479e9835b5c1fa6c2c9"
+  },
+  "crs_include_002": {
+    "bytes": 1652,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-905-COMMON-EXCEPTIONS.conf",
+    "sha256": "bd4b45e970893aa25e92e711e5c444879e21457b5586a5ddedb340e1f2fe93a4"
+  },
+  "crs_include_003": {
+    "bytes": 3012,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-911-METHOD-ENFORCEMENT.conf",
+    "sha256": "f8976b5b2256dcdd6f0230b2bfdcf88980eea85895aaa2cfa0e98c4fbcd8aedb"
+  },
+  "crs_include_004": {
+    "bytes": 3649,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-913-SCANNER-DETECTION.conf",
+    "sha256": "e3dd93fad4cb8bdd36bdd4474620126ebf0db663c789220d3e2c3eba30916dad"
+  },
+  "crs_include_005": {
+    "bytes": 69282,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-920-PROTOCOL-ENFORCEMENT.conf",
+    "sha256": "2318b110d4b0157c8072c5aad1a474d063c5e6c3abe09a3c691a9fb7ab7116b3"
+  },
+  "crs_include_006": {
+    "bytes": 24075,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-921-PROTOCOL-ATTACK.conf",
+    "sha256": "4cbba8d421d37cfd17f8f0b6eb95ba6bcdef4ee4279cf2e27889fba7dbfed3a5"
+  },
+  "crs_include_007": {
+    "bytes": 6928,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-922-MULTIPART-ATTACK.conf",
+    "sha256": "4601f7c6b5e039ea6914abf1f7086405ad5af86a89b88f58b27094e7a0c45f32"
+  },
+  "crs_include_008": {
+    "bytes": 9527,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-930-APPLICATION-ATTACK-LFI.conf",
+    "sha256": "1e716f91e2bcc4d15dd5e83e0002e89b1a40ee313d2a0292eee17acda2d6c9d7"
+  },
+  "crs_include_009": {
+    "bytes": 9743,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-931-APPLICATION-ATTACK-RFI.conf",
+    "sha256": "466ae07c32a5775bba1e34bc0529fda4658568fd61d1fd0185f620b31010b9a9"
+  },
+  "crs_include_010": {
+    "bytes": 199740,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-932-APPLICATION-ATTACK-RCE.conf",
+    "sha256": "ec7556491ad228df190eacc7f99e3cb8b0956de6d939efb95e5b817e4510cc7c"
+  },
+  "crs_include_011": {
+    "bytes": 70873,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-933-APPLICATION-ATTACK-PHP.conf",
+    "sha256": "d799024cf7947a47b759d4e85c9b675a7624b884c47dee02448f05a71b01d79c"
+  },
+  "crs_include_012": {
+    "bytes": 27029,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-934-APPLICATION-ATTACK-GENERIC.conf",
+    "sha256": "a21097c398e536b929371d3c73165eb7f34dbbb99583a39687b380d42162fc53"
+  },
+  "crs_include_013": {
+    "bytes": 55595,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-941-APPLICATION-ATTACK-XSS.conf",
+    "sha256": "14e6092301b8d47f1df2f2ccc8ccf76d5e6ade6d9cc79c6a00b65131fe640f4f"
+  },
+  "crs_include_014": {
+    "bytes": 98800,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-942-APPLICATION-ATTACK-SQLI.conf",
+    "sha256": "bed452377e3c7b83a243e197b69829530d0104b44471cc3a61986af3b48ff9e4"
+  },
+  "crs_include_015": {
+    "bytes": 6828,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf",
+    "sha256": "ea7fb9462019dbd3b7cacf5f0080f17be8aa325e0be0b281c54cb88b60dc54ca"
+  },
+  "crs_include_016": {
+    "bytes": 23633,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-944-APPLICATION-ATTACK-JAVA.conf",
+    "sha256": "7939738002c7210c7b38f14b26d8db5256cb2547003a11474878cc2b495fb9a2"
+  },
+  "crs_include_017": {
+    "bytes": 8205,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-949-BLOCKING-EVALUATION.conf",
+    "sha256": "2db05277c3feec7f90aa87914e51b0c11ae76c4701b9744f38e3ff8506b4ffde"
+  },
+  "crs_include_018": {
+    "bytes": 4802,
+    "path": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/rules/REQUEST-999-COMMON-EXCEPTIONS-AFTER.conf",
+    "sha256": "74c47d7d519d710e1c77ae75ebc5506c0323690b872dadd8421c3604d0a19308"
+  },
+  "crs_manifest": {
+    "bytes": 26610,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/crs_manifest.json",
+    "sha256": "6687cf70371f688c9573567c19d9ca09d4c79354ffc84dce14fe9e1551b86f6d"
+  },
+  "crs_policy_config": {
+    "bytes": 2315,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/modsecurity_crs_pl2.conf",
+    "sha256": "66f1f16a1f6201bea03f3b5d59fbd44c774ca6fc479a9104390e7d83d6001324"
+  },
+  "dependency_provenance": {
+    "bytes": 460,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/dependency_provenance.json",
+    "sha256": "4fd35e2471bbed9c332cec7c9eca24432b54fd1cf42f203f8ffebf03240b4e13"
+  },
+  "environment_start": {
+    "bytes": 10290,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/environment.json",
+    "sha256": "afc75d2a8211a05da45e8e690dfaf8dbcd7f04a6a6d73b7dee4a9714e0a54904"
+  },
+  "go_ftw": {
+    "bytes": 25653513,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/prefix/bin/go-ftw",
+    "sha256": "42f4745cb0f8de6819270653d0e01951f3dbd25595259c03090b4caf49f924a7"
+  },
+  "lumina_benchmark_harness": {
+    "bytes": 1933744,
+    "path": "/srv/lumina-canonical/LuminaWAF/build/lumina_benchmark_harness",
+    "sha256": "d61016a10633577350f8ac997318640e62f2d170386182017f052ecff7c8e088"
+  },
+  "lumina_generated_manifest": {
+    "bytes": 416663,
+    "path": "/srv/lumina-canonical/LuminaWAF/src/generated/rule_manifest.json",
+    "sha256": "0b014331ab339736c7e0cd8e1fe598d13cf5f582dcac6643d82e90805fd5fd62"
+  },
+  "lumina_nginx_config": {
+    "bytes": 598,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/nginx_luminawaf.conf",
+    "sha256": "0ac373d7175d99e85a82d55b886f14653f85f3a366a1ef3b2a30c6e9f9927427"
+  },
+  "lumina_nginx_module": {
+    "bytes": 84208,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/sources/nginx-1.30.4/objs/ngx_http_luminawaf_module.so",
+    "sha256": "5d0862f98876aabdbfa6f489fb440cd986386efca17b9aa0e095c5b23ddf4d2f"
+  },
+  "lumina_off_nginx_config": {
+    "bytes": 599,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/nginx_luminawaf_loaded_off.conf",
+    "sha256": "5c1fd63674326bd64618bd413f86f769df65a026cce14fac732239d601063405"
+  },
+  "lumina_symbol_isolation": {
+    "bytes": 466,
+    "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/symbol_isolation.json",
+    "sha256": "52a4e9d6246dcdf024c8a876509e8ae198882fd285e7996a5cefe2a7cb0db1ec"
+  },
+  "luminawaf": {
+    "bytes": 14238640,
+    "path": "/srv/lumina-canonical/LuminaWAF/build/libluminawaf.so",
+    "sha256": "9cb8c3b6b7ea6f0136f1aff7a11ce230b7e1cbb8c2f104958596b9f8eec9be32"
+  },
+  "modsecurity": {
+    "bytes": 56947752,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/prefix/lib/libmodsecurity.so.3.0.16",
+    "sha256": "13ba3d2532ba80fa55ba4882c6158cfbaa340335980a4fb31918a28b5fc91ad0"
+  },
+  "modsecurity_config": {
+    "bytes": 2315,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/modsecurity_crs_pl2.conf",
+    "sha256": "66f1f16a1f6201bea03f3b5d59fbd44c774ca6fc479a9104390e7d83d6001324"
+  },
+  "modsecurity_nginx_config": {
+    "bytes": 729,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/nginx_modsecurity.conf",
+    "sha256": "42aa5c4fdfd3127598c9ea6034bbef98852041fb67d8e074c99c0fe270bd9e46"
+  },
+  "modsecurity_nginx_module": {
+    "bytes": 240256,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/sources/nginx-1.30.4/objs/ngx_http_modsecurity_module.so",
+    "sha256": "5a7635807ced9b5c21b7cbf761d94d377569ad0c11223d2eff51c6b9f711b521"
+  },
+  "naxsi_core_rules": {
+    "bytes": 7106,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/sources/naxsi/naxsi_rules/naxsi_core.rules",
+    "sha256": "dc2afe04a9861ac8011bbabb23635b5e80617aa1c444d461a0ba6868bd00d433"
+  },
+  "naxsi_nginx_config": {
+    "bytes": 1096,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/config/nginx_naxsi_stock.conf",
+    "sha256": "1065bd306f70b18798779a41ca15520d0793458d6772091b6114b5d6832b6bc4"
+  },
+  "naxsi_nginx_module": {
+    "bytes": 1049312,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/sources/nginx-1.30.4/objs/ngx_http_naxsi_module.so",
+    "sha256": "da01248dc3d8a09190bca57be6c29a1a6b5b95382c4b8ea3ce006fe6aa763635"
+  },
+  "nginx": {
+    "bytes": 4469880,
+    "path": "/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/sources/nginx-1.30.4/objs/nginx",
+    "sha256": "565098bc8be20a2083b8de91c73e79898665fcd151e09473da2d15d579ce95ee"
+  },
+  "workload": {
+    "bytes": 3938,
+    "path": "/srv/lumina-canonical/LuminaWAF/bench/benchmark_harness/workloads/requests.json",
+    "sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+  }
+}

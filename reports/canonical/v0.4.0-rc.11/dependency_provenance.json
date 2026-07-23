@@ -1,0 +1,8 @@
+{
+  "modsecurity_pcre2_linkage": "private-shared",
+  "modsecurity_sha256": "13ba3d2532ba80fa55ba4882c6158cfbaa340335980a4fb31918a28b5fc91ad0",
+  "pcre2_static_sha256": "deaeaec66e81b55fb2db5a3b45ba07a94bf0f07651a567f7d936b7ebada82f27",
+  "pcre2_shared_sha256": "483c3daadbe3ec0649c8d66855e8480694a6cc8a0f8585a55401cf563b50d818",
+  "modsecurity_commit": "7ea9fefbe0ba409d8733b4d682c8c4c059cd028d",
+  "pcre2_commit": "b2bd4254b379b9d7dc9a3dda060a7e27009ccdff"
+}

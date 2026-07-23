@@ -83,30 +83,64 @@ The project is an experiment in:
 
 The current release supports a pinned inbound OWASP CRS PL2 profile through a combination of generated and native execution paths.
 
-Internal non-canonical qualification of a pre-RC commit established:
+### Canonical AMD EPYC 9124 Evidence
 
-* approximately **99.75% overall agreement** in the pinned CRS regression gate;
-* separate correctness, full-transaction, fixed-rate latency, saturation and PMU experiments;
-* a benchmark pipeline for paired NGINX overhead decomposition;
-* retained raw JSON, logs, histograms, hashes and validity decisions.
+The exact `v0.4.0-rc.11` source completed the Benchmark Harness V1.0 canonical qualification on a
+dedicated AMD EPYC 9124 bare-metal host with SMT disabled, CPUs `1-15` kernel-isolated and CPU `0`
+reserved for housekeeping. Every canonical phase passed, including artifact integrity, both CRS
+oracles, five-process microbenchmarks, fixed-rate latency, saturation, PMU, overhead decomposition
+and 1/2/4/8-worker scaling.
 
-Two consecutive diagnostic smoke runs from the current x86-64 pre-RC line observed:
+Correctness against the pinned ModSecurity-compatible CRS PL2 expectations was:
 
-* **106.20 µs** and **107.42 µs** median CPU time for the direct full allowed transaction;
-* **2.44 ms** and **2.47 ms** for the equivalent ModSecurity boundary, meaning ModSecurity used
-  approximately **23×** as much CPU time in those runs;
-* **170.82 µs** and **207.04 µs** of paired NGINX server CPU/request overhead for production PL2
-  inspection over the loaded-but-disabled Lumina module, at 1 and 10 connections respectively in
-  the latest run.
+* **99.75% overall** across 3,986 selected tests;
+* **99.72% exact matched-rule agreement** (`3161/3170`);
+* **99.88% negative exclusion agreement** (`815/816`);
+* ten retained disagreements, with zero timeouts and zero exceptions.
 
-The direct full-transaction CPU measurement and integrated NGINX server CPU/request overhead are
-different boundaries and must not be substituted for one another. These smoke observations use one
-independent benchmark process and one E2E repetition, so they are diagnostic rather than publication
-claims and do not provide process-level confidence intervals.
+Selected performance boundaries from the same canonical evidence are:
 
-These numbers are not universal performance claims.
+| Measurement boundary | LuminaWAF | ModSecurity | Coraza |
+|---|---:|---:|---:|
+| Direct full allow transaction CPU | **55.47 us** | 1.58 ms | 1.28 ms |
+| NGINX fixed-rate p50 at 422 RPS | **733 us** | 2.41 ms | 2.08 ms |
+| NGINX fixed-rate p99.9 at 422 RPS | **2.11 ms** | 4.37 ms | 8.15 ms |
+| Sustainable single-worker throughput | **9,570.88 RPS** | 704.01 RPS | 774.17 RPS |
+| Eight-worker throughput | **75,966.78 RPS** | 5,682.75 RPS | 6,047.31 RPS |
 
-They apply only to the exact:
+LuminaWAF's measured 1/2/4/8-worker speedups were `1.00x`, `2.00x`, `4.02x` and `8.01x`.
+Grouped PMU diagnostics for the direct allow transaction recorded `175,574` cycles, `553,171`
+instructions and IPC `3.151`, with every supported counter group running for `100%` of measured
+time. Unsupported LLC events remain reported as `unavailable`.
+
+These are not universal performance claims. The fixed-rate and saturation rotation contains six
+HTTP/1.1 `GET` requests with empty bodies, so those rows cover URI, query-string and request-header
+inspection rather than request-body ingestion. Performance was measured on one x86-64 host; no
+AArch64 performance claim is made. Coraza's stock NGINX connector exposes HTTP verdicts but not
+matched rule IDs, and NAXSI remains a separate native-WAF reference rather than a CRS engine.
+
+### Historical Intel Core i5 Haswell Diagnostics
+
+Before the bare-metal run, two consecutive diagnostic smoke runs were collected on the project's
+shared homelab host: an Intel Core i5-4210H at 2.90 GHz with two physical cores, four hardware
+threads and no kernel-isolated CPU set.
+
+Those `NON-CANONICAL` runs observed:
+
+* **106.20 us** and **107.42 us** median CPU time for the direct full allowed transaction;
+* **2.44 ms** and **2.47 ms** for the equivalent ModSecurity boundary, approximately **23x** the
+  LuminaWAF CPU time in those diagnostic runs;
+* **170.82 us** and **207.04 us** of paired NGINX server CPU/request overhead for production PL2
+  inspection over the loaded-but-disabled Lumina module, at one and ten connections respectively
+  in the later run.
+
+The direct transaction and integrated NGINX overhead values are different boundaries. Each smoke
+used one independent benchmark process and one E2E repetition, so it does not provide a
+process-level confidence interval. The Haswell observations remain useful historical diagnostics,
+but they are not publication claims and must not be compared directly with the EPYC result as a
+cross-version speedup: the host, isolation and qualification class differ.
+
+Every number applies only to the exact:
 
 * LuminaWAF commit;
 * CRS source commit;
@@ -117,13 +151,10 @@ They apply only to the exact:
 * measurement boundary;
 * qualification class.
 
-Neither the pre-RC qualification nor the smoke observations are the publication result for
-`v0.4.0-rc.4`. They were collected on a shared Intel Haswell host without full kernel CPU isolation.
-The final report must be regenerated from the exact tagged source state and will remain
-`NON-CANONICAL` unless every canonical host gate passes.
-
 See:
 
+* [Canonical v0.4.0-rc.11 evidence](reports/canonical/v0.4.0-rc.11/README.md)
+* [Full canonical report](reports/canonical/v0.4.0-rc.11/BENCHMARK_RESULTS.md)
 * [LuminaWAF Benchmark Harness v1](bench/benchmark_harness/README.md)
 * [Benchmark methodology](methodology/README.md)
 * [Published evidence contract](reports/README.md)

@@ -1,0 +1,37 @@
+{
+  "required_minimum_running_percent": 90.0,
+  "rows": [
+    {
+      "minimum_running_percent": 100.0,
+      "missing_required_events": [],
+      "path": "pmu_luminawaf.csv",
+      "unavailable_events": [
+        "LLC-load-misses",
+        "LLC-loads"
+      ],
+      "valid": true
+    },
+    {
+      "minimum_running_percent": 100.0,
+      "missing_required_events": [],
+      "path": "pmu_modsecurity.csv",
+      "unavailable_events": [
+        "LLC-load-misses",
+        "LLC-loads"
+      ],
+      "valid": true
+    },
+    {
+      "minimum_running_percent": 100.0,
+      "missing_required_events": [],
+      "path": "pmu_coraza.csv",
+      "unavailable_events": [
+        "LLC-load-misses",
+        "LLC-loads"
+      ],
+      "valid": true
+    }
+  ],
+  "schema": 1,
+  "valid": true
+}

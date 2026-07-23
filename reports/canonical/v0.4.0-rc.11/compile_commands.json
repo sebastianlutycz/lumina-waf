@@ -1,0 +1,176 @@
+[
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -std=c++17 -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/luminawaf.cpp.o -c /srv/lumina-canonical/LuminaWAF/src/luminawaf.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/luminawaf.cpp",
+  "output": "CMakeFiles/luminawaf.dir/src/luminawaf.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -std=c++17 -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_markers.cpp.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_markers.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_markers.cpp",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_markers.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/crs_tx_rules.c.o -c /srv/lumina-canonical/LuminaWAF/src/crs_tx_rules.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/crs_tx_rules.c",
+  "output": "CMakeFiles/luminawaf.dir/src/crs_tx_rules.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/canonicalize.c.o -c /srv/lumina-canonical/LuminaWAF/src/canonicalize.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/canonicalize.c",
+  "output": "CMakeFiles/luminawaf.dir/src/canonicalize.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/fast_prefilter.c.o -c /srv/lumina-canonical/LuminaWAF/src/fast_prefilter.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/fast_prefilter.c",
+  "output": "CMakeFiles/luminawaf.dir/src/fast_prefilter.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/generated/crs_chains.c.o -c /srv/lumina-canonical/LuminaWAF/src/generated/crs_chains.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/generated/crs_chains.c",
+  "output": "CMakeFiles/luminawaf.dir/src/generated/crs_chains.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/generated/crs_transform_mask.c.o -c /srv/lumina-canonical/LuminaWAF/src/generated/crs_transform_mask.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/generated/crs_transform_mask.c",
+  "output": "CMakeFiles/luminawaf.dir/src/generated/crs_transform_mask.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_cmd.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_cmd.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_cmd.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_cmd.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_jndi.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_jndi.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_jndi.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_jndi.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_ldap.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_ldap.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_ldap.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_ldap.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_path.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_path.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_path.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_path.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_resp_split.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_resp_split.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_resp_split.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_resp_split.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_sqli.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_sqli.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_sqli.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_sqli.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_ssrf.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_ssrf.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_ssrf.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_ssrf.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_scan_xss.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_scan_xss.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_scan_xss.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_scan_xss.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -fvisibility=hidden -o CMakeFiles/luminawaf.dir/src/lumina_sqli.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_sqli.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_sqli.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_sqli.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_transforms.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_transforms.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_transforms.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_transforms.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_xml_parser.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_xml_parser.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_xml_parser.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_xml_parser.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/lumina_xml_tokenizer.c.o -c /srv/lumina-canonical/LuminaWAF/src/lumina_xml_tokenizer.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/lumina_xml_tokenizer.c",
+  "output": "CMakeFiles/luminawaf.dir/src/lumina_xml_tokenizer.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/parser_avx2.c.o -c /srv/lumina-canonical/LuminaWAF/src/parser_avx2.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/parser_avx2.c",
+  "output": "CMakeFiles/luminawaf.dir/src/parser_avx2.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/parser_scalar.c.o -c /srv/lumina-canonical/LuminaWAF/src/parser_scalar.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/parser_scalar.c",
+  "output": "CMakeFiles/luminawaf.dir/src/parser_scalar.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/pm_compat_shim.c.o -c /srv/lumina-canonical/LuminaWAF/src/pm_compat_shim.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/pm_compat_shim.c",
+  "output": "CMakeFiles/luminawaf.dir/src/pm_compat_shim.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -Dluminawaf_EXPORTS -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -fPIC -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/luminawaf.dir/src/trigger_matcher.c.o -c /srv/lumina-canonical/LuminaWAF/src/trigger_matcher.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/src/trigger_matcher.c",
+  "output": "CMakeFiles/luminawaf.dir/src/trigger_matcher.c.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DNDEBUG  -O3 -DNDEBUG -std=c++17 -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/micro_bench.dir/tests/eval_suite/micro_bench.cpp.o -c /srv/lumina-canonical/LuminaWAF/tests/eval_suite/micro_bench.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/micro_bench.cpp",
+  "output": "CMakeFiles/micro_bench.dir/tests/eval_suite/micro_bench.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DBENCHMARK_STATIC_DEFINE -DLUMINA_BENCH_V1_DEFAULT_MODSEC_CONFIG=\\\"/srv/lumina-canonical/LuminaWAF/tests/eval_suite/modsec_crs_pl2.conf\\\" -DNDEBUG -I/srv/lumina-canonical/LuminaWAF/src -I/srv/lumina-canonical/LuminaWAF/build/generated -isystem /srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/prefix/include -O3 -DNDEBUG -std=c++17 -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/lumina_benchmark_harness.dir/bench/benchmark_harness/lumina_benchmark_harness.cpp.o -c /srv/lumina-canonical/LuminaWAF/bench/benchmark_harness/lumina_benchmark_harness.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/bench/benchmark_harness/lumina_benchmark_harness.cpp",
+  "output": "CMakeFiles/lumina_benchmark_harness.dir/bench/benchmark_harness/lumina_benchmark_harness.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DNDEBUG -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/corpus_bench.dir/bench/corpus_bench.cpp.o -c /srv/lumina-canonical/LuminaWAF/bench/corpus_bench.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/bench/corpus_bench.cpp",
+  "output": "CMakeFiles/corpus_bench.dir/bench/corpus_bench.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DNDEBUG -I/srv/lumina-canonical/LuminaWAF/src -I/srv/lumina-canonical/LuminaWAF/bench -O3 -DNDEBUG -std=c++17 -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/synthetic_bench.dir/bench/synthetic_bench.cpp.o -c /srv/lumina-canonical/LuminaWAF/bench/synthetic_bench.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/bench/synthetic_bench.cpp",
+  "output": "CMakeFiles/synthetic_bench.dir/bench/synthetic_bench.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/c++ -DNDEBUG -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/parity_audit.dir/tests/eval_suite/parity_audit.cpp.o -c /srv/lumina-canonical/LuminaWAF/tests/eval_suite/parity_audit.cpp",
+  "file": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/parity_audit.cpp",
+  "output": "CMakeFiles/parity_audit.dir/tests/eval_suite/parity_audit.cpp.o"
+},
+{
+  "directory": "/srv/lumina-canonical/LuminaWAF/build",
+  "command": "/usr/bin/cc -DNDEBUG -I/srv/lumina-canonical/LuminaWAF/src -O3 -DNDEBUG -Wall -Wextra -pedantic -O3 -flto -g -fno-omit-frame-pointer -mavx2 -mbmi -mpopcnt -o CMakeFiles/rc_runtime_sanity.dir/tests/eval_suite/rc_runtime_sanity.c.o -c /srv/lumina-canonical/LuminaWAF/tests/eval_suite/rc_runtime_sanity.c",
+  "file": "/srv/lumina-canonical/LuminaWAF/tests/eval_suite/rc_runtime_sanity.c",
+  "output": "CMakeFiles/rc_runtime_sanity.dir/tests/eval_suite/rc_runtime_sanity.c.o"
+}
+]

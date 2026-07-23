@@ -1,0 +1,27 @@
+{
+  "required_minimum_running_percent": 90.0,
+  "rows": [
+    {
+      "minimum_running_percent": 100.0,
+      "missing_required_events": [],
+      "path": "overhead_pmu_inspectprebuilt.csv",
+      "unavailable_events": [
+        "LLC-load-misses",
+        "LLC-loads"
+      ],
+      "valid": true
+    },
+    {
+      "minimum_running_percent": 100.0,
+      "missing_required_events": [],
+      "path": "overhead_pmu_fulldirect.csv",
+      "unavailable_events": [
+        "LLC-load-misses",
+        "LLC-loads"
+      ],
+      "valid": true
+    }
+  ],
+  "schema": 1,
+  "valid": true
+}

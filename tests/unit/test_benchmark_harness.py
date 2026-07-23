@@ -669,6 +669,7 @@ Requests/sec: 9999.90
             (scaling / "results.json").write_text(
                 json.dumps({
                     "valid": True,
+                    "max_client_utilization_percent": 87.5,
                     "rows": [{
                         "engine": "luminawaf", "table": "crs", "workers": 2,
                         "rps": 1900.0, "speedup": 1.9,
@@ -700,6 +701,7 @@ Requests/sec: 9999.90
             self.assertIn("A host annotation documents contention", rendered)
             self.assertIn("Multi-Worker Scaling", rendered)
             self.assertIn("95.00%", rendered)
+            self.assertIn("client CPU <=87.5%", rendered)
 
     def test_micro_qualification_requires_raw_repetitions(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,3084 @@
+{
+  "adapter_set": "all",
+  "canonical_requested": true,
+  "client_cpu": "9-10",
+  "client_cpu_count": 2,
+  "client_thread_policy": "min(configured_threads, connections)",
+  "client_threads": 2,
+  "connection_points": [
+    10
+  ],
+  "coverage_valid": true,
+  "duration": "290s",
+  "expected_results": 25,
+  "identity_errors": [],
+  "infrastructure_invalid_legs": [],
+  "mode": "fixed",
+  "observed_results": 25,
+  "overload_invalid_legs": [],
+  "requested_rate": 422,
+  "results": [
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.904803,
+      "client_cpu_utilization_percent": 0.8456556896551723,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 116690
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 116691
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 116692
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1540.0,
+        "p50": 1040.0,
+        "p90": 1140.0,
+        "p99": 1210.0,
+        "p99_9": 1350.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 116686
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi"
+      ],
+      "raw": "fixed_00_10_baseline.txt",
+      "repetition": 0,
+      "requests": 122382,
+      "requests_per_second": 422.01,
+      "round_id": "all-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 32602.833750061283,
+      "server_cpu_seconds": 3.99,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "baseline",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 116687
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 116688
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 116689
+        }
+      ],
+      "warmup_raw": "warmup_00_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.852818000000001,
+      "client_cpu_utilization_percent": 0.8366927586206898,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 117453
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 117454
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 117455
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2210.0,
+        "p50": 733.0,
+        "p90": 1160.0,
+        "p99": 1800.0,
+        "p99_9": 2110.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 117449
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi"
+      ],
+      "raw": "fixed_00_10_luminawaf.txt",
+      "repetition": 0,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 140298.40989688024,
+      "server_cpu_seconds": 17.169999999999998,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 117450
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 117451
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 117452
+        }
+      ],
+      "warmup_raw": "warmup_00_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.892158,
+      "client_cpu_utilization_percent": 0.8434755172413794,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 118155
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 118156
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 118157
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "e487d09fe1ccbb4c3f88afdf99648fd9734d57400940d825560f1ca704054dde",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "modsecurity",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 5070.0,
+        "p50": 2340.0,
+        "p90": 3120.0,
+        "p99": 3870.0,
+        "p99_9": 4430.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 118151
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "3c6ccb4a753c6384debd1c580a91df775a8b79d3125607fe7a8fcc233952899b",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi"
+      ],
+      "raw": "fixed_00_10_modsecurity.txt",
+      "repetition": 0,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1443769.8662374062,
+      "server_cpu_seconds": 176.69,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 118152
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 118153
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 118154
+        }
+      ],
+      "warmup_raw": "warmup_00_10_modsecurity.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.901802000000002,
+      "client_cpu_utilization_percent": 0.8451382758620692,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 118734
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 118735
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 118736
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "23e0c5f228d164836b6c06b805563834a7753774f0996193377edb32217c7eff",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "coraza",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 10040.0,
+        "p50": 2280.0,
+        "p90": 3480.0,
+        "p99": 6820.0,
+        "p99_9": 8610.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 118726
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "e0bd49e5ba41ed52272ff58920559e040fd4d3bc5d6b009317bc591e810bbacc",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi"
+      ],
+      "raw": "fixed_00_10_coraza.txt",
+      "repetition": 0,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1330271.855925348,
+      "server_cpu_seconds": 162.8,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 118731
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 118732
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 118733
+        }
+      ],
+      "warmup_raw": "warmup_00_10_coraza.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.890262,
+      "client_cpu_utilization_percent": 0.8431486206896552,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 119441
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 119442
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 119443
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "771755a741f1298b7922dc0ab53e179999d748c70304a25147357ee38e35e86c",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "naxsi",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2009.9999999999998,
+        "p50": 674.0,
+        "p90": 1540.0,
+        "p99": 1750.0,
+        "p99_9": 1870.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 119437
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "f2c964d0f08904fb7c7f648844a4358d06a229a53cfe106019004b29d4919f5b",
+      "order": [
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi"
+      ],
+      "raw": "fixed_00_10_naxsi.txt",
+      "repetition": 0,
+      "requests": 122382,
+      "requests_per_second": 422.01,
+      "round_id": "all-r00-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 43633.86772564593,
+      "server_cpu_seconds": 5.34,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "native-waf",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 119438
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 119439
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 119440
+        }
+      ],
+      "warmup_raw": "warmup_00_10_naxsi.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.855743999999998,
+      "client_cpu_utilization_percent": 0.8371972413793101,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 120010
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 120011
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 120012
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2290.0,
+        "p50": 729.0,
+        "p90": 1160.0,
+        "p99": 1800.0,
+        "p99_9": 2120.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 120004
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_luminawaf.txt",
+      "repetition": 1,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 141605.791701394,
+      "server_cpu_seconds": 17.33,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 120005
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 120006
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 120007
+        }
+      ],
+      "warmup_raw": "warmup_01_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.905418999999995,
+      "client_cpu_utilization_percent": 0.8457618965517232,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 120711
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 120712
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 120713
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "e487d09fe1ccbb4c3f88afdf99648fd9734d57400940d825560f1ca704054dde",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "modsecurity",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 5110.0,
+        "p50": 2400.0,
+        "p90": 3310.0,
+        "p99": 4000.0,
+        "p99_9": 4330.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 120707
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "3c6ccb4a753c6384debd1c580a91df775a8b79d3125607fe7a8fcc233952899b",
+      "order": [
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_modsecurity.txt",
+      "repetition": 1,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1446221.2271512733,
+      "server_cpu_seconds": 176.98999999999998,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 120708
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 120709
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 120710
+        }
+      ],
+      "warmup_raw": "warmup_01_10_modsecurity.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122380,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.915944000000003,
+      "client_cpu_utilization_percent": 0.8475765517241385,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 121491
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 121492
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 121493
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "23e0c5f228d164836b6c06b805563834a7753774f0996193377edb32217c7eff",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "coraza",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 11030.0,
+        "p50": 2280.0,
+        "p90": 3500.0,
+        "p99": 6890.0,
+        "p99_9": 8620.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 121483
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "e0bd49e5ba41ed52272ff58920559e040fd4d3bc5d6b009317bc591e810bbacc",
+      "order": [
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_coraza.txt",
+      "repetition": 1,
+      "requests": 122380,
+      "requests_per_second": 422.0,
+      "round_id": "all-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1332570.6814839025,
+      "server_cpu_seconds": 163.08,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 121488
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 121489
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 121490
+        }
+      ],
+      "warmup_raw": "warmup_01_10_coraza.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.8590170000000015,
+      "client_cpu_utilization_percent": 0.8377615517241381,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 122078
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 122079
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 122080
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "771755a741f1298b7922dc0ab53e179999d748c70304a25147357ee38e35e86c",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "naxsi",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2000.0,
+        "p50": 643.0,
+        "p90": 1530.0,
+        "p99": 1730.0,
+        "p99_9": 1860.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 122074
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "f2c964d0f08904fb7c7f648844a4358d06a229a53cfe106019004b29d4919f5b",
+      "order": [
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_naxsi.txt",
+      "repetition": 1,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 44450.98135346701,
+      "server_cpu_seconds": 5.44,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "native-waf",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 122075
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 122076
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 122077
+        }
+      ],
+      "warmup_raw": "warmup_01_10_naxsi.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.915953999999999,
+      "client_cpu_utilization_percent": 0.8475782758620688,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 122791
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 122792
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 122793
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1620.0,
+        "p50": 1030.0,
+        "p90": 1150.0,
+        "p99": 1230.0,
+        "p99_9": 1390.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 122787
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "luminawaf",
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline"
+      ],
+      "raw": "fixed_01_10_baseline.txt",
+      "repetition": 1,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r01-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 32602.833750061283,
+      "server_cpu_seconds": 3.99,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "baseline",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 122788
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 122789
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 122790
+        }
+      ],
+      "warmup_raw": "warmup_01_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.884345000000003,
+      "client_cpu_utilization_percent": 0.8421284482758626,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 123371
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 123372
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 123373
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "e487d09fe1ccbb4c3f88afdf99648fd9734d57400940d825560f1ca704054dde",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "modsecurity",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 4750.0,
+        "p50": 2480.0,
+        "p90": 3470.0,
+        "p99": 4030.0000000000005,
+        "p99_9": 4400.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 123367
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "3c6ccb4a753c6384debd1c580a91df775a8b79d3125607fe7a8fcc233952899b",
+      "order": [
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf"
+      ],
+      "raw": "fixed_02_10_modsecurity.txt",
+      "repetition": 2,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1435516.9511607192,
+      "server_cpu_seconds": 175.67999999999998,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 123368
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 123369
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 123370
+        }
+      ],
+      "warmup_raw": "warmup_02_10_modsecurity.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.909747000000003,
+      "client_cpu_utilization_percent": 0.8465081034482763,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 124083
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 124084
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 124085
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "23e0c5f228d164836b6c06b805563834a7753774f0996193377edb32217c7eff",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "coraza",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 10220.0,
+        "p50": 2080.0,
+        "p90": 3080.0,
+        "p99": 6560.0,
+        "p99_9": 8150.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 124075
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "e0bd49e5ba41ed52272ff58920559e040fd4d3bc5d6b009317bc591e810bbacc",
+      "order": [
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf"
+      ],
+      "raw": "fixed_02_10_coraza.txt",
+      "repetition": 2,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1339995.5875503551,
+      "server_cpu_seconds": 163.99,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 124080
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 124081
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 124082
+        }
+      ],
+      "warmup_raw": "warmup_02_10_coraza.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.856790999999994,
+      "client_cpu_utilization_percent": 0.8373777586206885,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 124783
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 124784
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 124785
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "771755a741f1298b7922dc0ab53e179999d748c70304a25147357ee38e35e86c",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "naxsi",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2029.9999999999998,
+        "p50": 634.0,
+        "p90": 1530.0,
+        "p99": 1730.0,
+        "p99_9": 1860.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 124733
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "f2c964d0f08904fb7c7f648844a4358d06a229a53cfe106019004b29d4919f5b",
+      "order": [
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf"
+      ],
+      "raw": "fixed_02_10_naxsi.txt",
+      "repetition": 2,
+      "requests": 122382,
+      "requests_per_second": 422.01,
+      "round_id": "all-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 44696.115441813345,
+      "server_cpu_seconds": 5.470000000000001,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "native-waf",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 124734
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 124735
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 124736
+        }
+      ],
+      "warmup_raw": "warmup_02_10_naxsi.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.915518000000006,
+      "client_cpu_utilization_percent": 0.8475031034482768,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 125373
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 125374
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 125375
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1620.0,
+        "p50": 1030.0,
+        "p90": 1160.0,
+        "p99": 1240.0,
+        "p99_9": 1380.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 125369
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf"
+      ],
+      "raw": "fixed_02_10_baseline.txt",
+      "repetition": 2,
+      "requests": 122382,
+      "requests_per_second": 422.01,
+      "round_id": "all-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 32766.2564756255,
+      "server_cpu_seconds": 4.01,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "baseline",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 125370
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 125371
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 125372
+        }
+      ],
+      "warmup_raw": "warmup_02_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.819707000000008,
+      "client_cpu_utilization_percent": 0.8309839655172427,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 126078
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 126079
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 126080
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2210.0,
+        "p50": 735.0,
+        "p90": 1150.0,
+        "p99": 1800.0,
+        "p99_9": 2100.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 126066
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "modsecurity",
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf"
+      ],
+      "raw": "fixed_02_10_luminawaf.txt",
+      "repetition": 2,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r02-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 139563.00763184126,
+      "server_cpu_seconds": 17.08,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 126067
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 126068
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 126069
+        }
+      ],
+      "warmup_raw": "warmup_02_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122380,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.928414000000004,
+      "client_cpu_utilization_percent": 0.8497265517241386,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 126668
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 126669
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 126670
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "23e0c5f228d164836b6c06b805563834a7753774f0996193377edb32217c7eff",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "coraza",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 9610.0,
+        "p50": 2060.0,
+        "p90": 3130.0,
+        "p99": 6470.0,
+        "p99_9": 7870.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 126660
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "e0bd49e5ba41ed52272ff58920559e040fd4d3bc5d6b009317bc591e810bbacc",
+      "order": [
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity"
+      ],
+      "raw": "fixed_03_10_coraza.txt",
+      "repetition": 3,
+      "requests": 122380,
+      "requests_per_second": 422.0,
+      "round_id": "all-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1332080.405294983,
+      "server_cpu_seconds": 163.02,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 126665
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 126666
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 126667
+        }
+      ],
+      "warmup_raw": "warmup_03_10_coraza.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.8819540000000075,
+      "client_cpu_utilization_percent": 0.841716206896553,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 127369
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 127370
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 127371
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "771755a741f1298b7922dc0ab53e179999d748c70304a25147357ee38e35e86c",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "naxsi",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2000.0,
+        "p50": 649.0,
+        "p90": 1520.0,
+        "p99": 1730.0,
+        "p99_9": 1880.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 127365
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "f2c964d0f08904fb7c7f648844a4358d06a229a53cfe106019004b29d4919f5b",
+      "order": [
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity"
+      ],
+      "raw": "fixed_03_10_naxsi.txt",
+      "repetition": 3,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 44777.82680459545,
+      "server_cpu_seconds": 5.48,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "native-waf",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 127366
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 127367
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 127368
+        }
+      ],
+      "warmup_raw": "warmup_03_10_naxsi.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.931066999999999,
+      "client_cpu_utilization_percent": 0.8501839655172412,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 128027
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 128028
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 128029
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1610.0,
+        "p50": 1030.0,
+        "p90": 1150.0,
+        "p99": 1220.0,
+        "p99_9": 1370.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 128023
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity"
+      ],
+      "raw": "fixed_03_10_baseline.txt",
+      "repetition": 3,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 32112.565573368633,
+      "server_cpu_seconds": 3.93,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "baseline",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 128024
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 128025
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 128026
+        }
+      ],
+      "warmup_raw": "warmup_03_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.840945000000005,
+      "client_cpu_utilization_percent": 0.8346456896551733,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 128728
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 128729
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 128730
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2220.0,
+        "p50": 728.0,
+        "p90": 1160.0,
+        "p99": 1820.0,
+        "p99_9": 2110.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 128724
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity"
+      ],
+      "raw": "fixed_03_10_luminawaf.txt",
+      "repetition": 3,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 139154.45081793072,
+      "server_cpu_seconds": 17.029999999999998,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 128725
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 128726
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 128727
+        }
+      ],
+      "warmup_raw": "warmup_03_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.897489000000007,
+      "client_cpu_utilization_percent": 0.844394655172415,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 129423
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 129424
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 129425
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "e487d09fe1ccbb4c3f88afdf99648fd9734d57400940d825560f1ca704054dde",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "modsecurity",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 4820.0,
+        "p50": 2470.0,
+        "p90": 3400.0,
+        "p99": 4050.0,
+        "p99_9": 4370.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 129417
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "3c6ccb4a753c6384debd1c580a91df775a8b79d3125607fe7a8fcc233952899b",
+      "order": [
+        "coraza",
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity"
+      ],
+      "raw": "fixed_03_10_modsecurity.txt",
+      "repetition": 3,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r03-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1463789.3137006562,
+      "server_cpu_seconds": 179.14,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 129418
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 129419
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 129420
+        }
+      ],
+      "warmup_raw": "warmup_03_10_modsecurity.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.844612000000012,
+      "client_cpu_utilization_percent": 0.8352779310344848,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 130026
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 130027
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 130028
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "771755a741f1298b7922dc0ab53e179999d748c70304a25147357ee38e35e86c",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "naxsi",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1990.0,
+        "p50": 640.0,
+        "p90": 1520.0,
+        "p99": 1740.0,
+        "p99_9": 1870.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 130022
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "f2c964d0f08904fb7c7f648844a4358d06a229a53cfe106019004b29d4919f5b",
+      "order": [
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza"
+      ],
+      "raw": "fixed_04_10_naxsi.txt",
+      "repetition": 4,
+      "requests": 122382,
+      "requests_per_second": 422.01,
+      "round_id": "all-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 44287.5586279028,
+      "server_cpu_seconds": 5.42,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "native-waf",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 130023
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 130024
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 130025
+        }
+      ],
+      "warmup_raw": "warmup_04_10_naxsi.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.92061600000001,
+      "client_cpu_utilization_percent": 0.8483820689655188,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 130730
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 130731
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 130732
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "9b3e5aaa892b48ee2dbf71c8629cf83f6123635b8c4dba68b1c87ecd298f1781",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "baseline",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 1650.0,
+        "p50": 1030.0,
+        "p90": 1140.0,
+        "p99": 1210.0,
+        "p99_9": 1370.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 130726
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "055c1d0a4b2965a942df459c865a0f5e292a3e6b4b0f5d748e1cfbd3f6936b8a",
+      "order": [
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza"
+      ],
+      "raw": "fixed_04_10_baseline.txt",
+      "repetition": 4,
+      "requests": 122382,
+      "requests_per_second": 422.0,
+      "round_id": "all-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 32357.699661714963,
+      "server_cpu_seconds": 3.9600000000000004,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "baseline",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 130727
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 130728
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 130729
+        }
+      ],
+      "warmup_raw": "warmup_04_10_baseline.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122382,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.845587000000009,
+      "client_cpu_utilization_percent": 0.8354460344827601,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 131304
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 131305
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 131306
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "003d3c979c8843d2b6fa22c1c75754ed4aa106162e4229b9a2031814d5dbfc09",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "luminawaf",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 2200.0,
+        "p50": 733.0,
+        "p90": 1160.0,
+        "p99": 1800.0,
+        "p99_9": 2110.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 131300
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "8d846c305aaa1aab130efc22d0485452fb6fde1fbc136e9a134571f2c5d7d47a",
+      "order": [
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza"
+      ],
+      "raw": "fixed_04_10_luminawaf.txt",
+      "repetition": 4,
+      "requests": 122382,
+      "requests_per_second": 422.01,
+      "round_id": "all-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 140706.9667107908,
+      "server_cpu_seconds": 17.22,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 131301
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 131302
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 131303
+        }
+      ],
+      "warmup_raw": "warmup_04_10_luminawaf.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.900052000000002,
+      "client_cpu_utilization_percent": 0.8448365517241383,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 132006
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 132007
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 132008
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "e487d09fe1ccbb4c3f88afdf99648fd9734d57400940d825560f1ca704054dde",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "modsecurity",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 4800.0,
+        "p50": 2410.0,
+        "p90": 3330.0,
+        "p99": 3960.0,
+        "p99_9": 4280.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 132002
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "3c6ccb4a753c6384debd1c580a91df775a8b79d3125607fe7a8fcc233952899b",
+      "order": [
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza"
+      ],
+      "raw": "fixed_04_10_modsecurity.txt",
+      "repetition": 4,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1446384.651212198,
+      "server_cpu_seconds": 177.01,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 132003
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 132004
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 132005
+        }
+      ],
+      "warmup_raw": "warmup_04_10_modsecurity.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    },
+    {
+      "accepted_requests": 122381,
+      "allow_response_contract": {
+        "allow_api_page": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_encoded_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_get_search": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_health": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_product_detail": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        },
+        "allow_static_asset": {
+          "body_sha256": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "status": 200
+        }
+      },
+      "allow_response_contract_sha256": "7ad0d581eac0a8ed3e74eafb55ec128f3c9fe3387b5c49ced31152c0d96e929c",
+      "client_cpu": "9-10",
+      "client_cpu_count": 2,
+      "client_cpu_seconds": 4.928865999999999,
+      "client_cpu_utilization_percent": 0.8498044827586206,
+      "client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 132664
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 132665
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 132666
+        }
+      ],
+      "client_threads": 2,
+      "config_sha256": "23e0c5f228d164836b6c06b805563834a7753774f0996193377edb32217c7eff",
+      "configured_client_threads": 2,
+      "connections": 10,
+      "engine": "coraza",
+      "invalid_reasons": [],
+      "latency_us": {
+        "max": 9920.0,
+        "p50": 2070.0,
+        "p90": 3200.0,
+        "p99": 6550.0,
+        "p99_9": 8150.0
+      },
+      "nginx_worker_affinity": [
+        {
+          "cpu": 1,
+          "role": "nginx-worker",
+          "task_id": 132616
+        }
+      ],
+      "non_success": 0,
+      "normalized_config_sha256": "e0bd49e5ba41ed52272ff58920559e040fd4d3bc5d6b009317bc591e810bbacc",
+      "order": [
+        "naxsi",
+        "baseline",
+        "luminawaf",
+        "modsecurity",
+        "coraza"
+      ],
+      "raw": "fixed_04_10_coraza.txt",
+      "repetition": 4,
+      "requests": 122381,
+      "requests_per_second": 422.0,
+      "round_id": "all-r04-c10",
+      "server_cpu": "1",
+      "server_cpu_accounting": {
+        "clock_ticks_per_second": 100,
+        "fields": "utime+stime",
+        "load_generator_included": false,
+        "process_scope": "nginx master plus direct workers",
+        "source": "/proc/<nginx-master-or-worker>/stat"
+      },
+      "server_cpu_count": 1,
+      "server_cpu_ns_per_request": 1332314.6566869037,
+      "server_cpu_seconds": 163.04999999999998,
+      "socket_error_breakdown": {},
+      "socket_errors": 0,
+      "table": "crs",
+      "valid": true,
+      "warmup_client_thread_affinity": [
+        {
+          "cpu": 9,
+          "role": "client-main",
+          "task_id": 132621
+        },
+        {
+          "cpu": 9,
+          "role": "client-worker",
+          "task_id": 132622
+        },
+        {
+          "cpu": 10,
+          "role": "client-worker",
+          "task_id": 132623
+        }
+      ],
+      "warmup_raw": "warmup_04_10_coraza.txt",
+      "workers": 1,
+      "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+    }
+  ],
+  "schema": 1,
+  "server_cpu": "1",
+  "server_cpu_count": 1,
+  "stability": [
+    {
+      "connections": 10,
+      "cv_percent": 0.0012979084499309674,
+      "diagnostic_available": true,
+      "engine": "baseline",
+      "median_rps": 422.0,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    },
+    {
+      "connections": 10,
+      "cv_percent": 0.0010597428341561205,
+      "diagnostic_available": true,
+      "engine": "luminawaf",
+      "median_rps": 422.0,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    },
+    {
+      "connections": 10,
+      "cv_percent": 0.0,
+      "diagnostic_available": true,
+      "engine": "modsecurity",
+      "median_rps": 422.0,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    },
+    {
+      "connections": 10,
+      "cv_percent": 0.0,
+      "diagnostic_available": true,
+      "engine": "coraza",
+      "median_rps": 422.0,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    },
+    {
+      "connections": 10,
+      "cv_percent": 0.0012979022987935434,
+      "diagnostic_available": true,
+      "engine": "naxsi",
+      "median_rps": 422.01,
+      "stable": true,
+      "sustainable": false,
+      "valid_runs": 5
+    }
+  ],
+  "stability_valid": true,
+  "valid": true,
+  "warmup_duration": "1s",
+  "workers": 1,
+  "workload": "/srv/lumina-canonical/LuminaWAF/bench/benchmark_harness/workloads/requests.json",
+  "workload_allow_requests": 6,
+  "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+}

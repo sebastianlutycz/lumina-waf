@@ -1,0 +1,710 @@
+{
+  "artifact_manifest_sha256": "41f371f1913621f5a935799ac3b1ff2c402ede2e50ce1747c7e787549c3a3714",
+  "artifact_postflight": {
+    "checked": 71,
+    "errors": [],
+    "schema": 1,
+    "valid": true
+  },
+  "artifact_preflight": {
+    "checked": 71,
+    "errors": [],
+    "schema": 1,
+    "valid": true
+  },
+  "build_provenance_sha256": "dc768c6a861d85d16952d8a6c94bd0459a5e1943b93a7cd46f3ea36586ef2285",
+  "canonical": true,
+  "crs_manifest_sha256": "4123125ca52d7f0247179073cf1bedbb99fea40aeb9ec1fd1eebc6d1aea40994",
+  "micro_qualification": {
+    "cpu_set": "1",
+    "errors": [],
+    "processes": [
+      {
+        "path": "micro.json",
+        "raw_repetitions": {
+          "FullTransaction/Coraza/Allow": 10,
+          "FullTransaction/Coraza/Attack": 10,
+          "FullTransaction/LuminaWAF/Allow": 10,
+          "FullTransaction/LuminaWAF/Attack": 10,
+          "FullTransaction/ModSecurity/Allow": 10,
+          "FullTransaction/ModSecurity/Attack": 10
+        }
+      },
+      {
+        "path": "micro_process_01.json",
+        "raw_repetitions": {
+          "FullTransaction/Coraza/Allow": 10,
+          "FullTransaction/Coraza/Attack": 10,
+          "FullTransaction/LuminaWAF/Allow": 10,
+          "FullTransaction/LuminaWAF/Attack": 10,
+          "FullTransaction/ModSecurity/Allow": 10,
+          "FullTransaction/ModSecurity/Attack": 10
+        }
+      },
+      {
+        "path": "micro_process_02.json",
+        "raw_repetitions": {
+          "FullTransaction/Coraza/Allow": 10,
+          "FullTransaction/Coraza/Attack": 10,
+          "FullTransaction/LuminaWAF/Allow": 10,
+          "FullTransaction/LuminaWAF/Attack": 10,
+          "FullTransaction/ModSecurity/Allow": 10,
+          "FullTransaction/ModSecurity/Attack": 10
+        }
+      },
+      {
+        "path": "micro_process_03.json",
+        "raw_repetitions": {
+          "FullTransaction/Coraza/Allow": 10,
+          "FullTransaction/Coraza/Attack": 10,
+          "FullTransaction/LuminaWAF/Allow": 10,
+          "FullTransaction/LuminaWAF/Attack": 10,
+          "FullTransaction/ModSecurity/Allow": 10,
+          "FullTransaction/ModSecurity/Attack": 10
+        }
+      },
+      {
+        "path": "micro_process_04.json",
+        "raw_repetitions": {
+          "FullTransaction/Coraza/Allow": 10,
+          "FullTransaction/Coraza/Attack": 10,
+          "FullTransaction/LuminaWAF/Allow": 10,
+          "FullTransaction/LuminaWAF/Attack": 10,
+          "FullTransaction/ModSecurity/Allow": 10,
+          "FullTransaction/ModSecurity/Attack": 10
+        }
+      }
+    ],
+    "required_processes": 5,
+    "required_repetitions": 10,
+    "valid": true
+  },
+  "mode": "canonical",
+  "overhead_micro_qualification": {
+    "cpu_set": "1",
+    "errors": [],
+    "processes": [
+      {
+        "path": "overhead_micro.json",
+        "raw_repetitions": {
+          "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+          "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+          "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+        }
+      },
+      {
+        "path": "overhead_micro_process_01.json",
+        "raw_repetitions": {
+          "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+          "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+          "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+        }
+      },
+      {
+        "path": "overhead_micro_process_02.json",
+        "raw_repetitions": {
+          "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+          "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+          "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+        }
+      },
+      {
+        "path": "overhead_micro_process_03.json",
+        "raw_repetitions": {
+          "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+          "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+          "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+        }
+      },
+      {
+        "path": "overhead_micro_process_04.json",
+        "raw_repetitions": {
+          "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+          "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+          "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+        }
+      }
+    ],
+    "required_processes": 5,
+    "required_repetitions": 10,
+    "valid": true
+  },
+  "overhead_pmu_qualification": {
+    "required_minimum_running_percent": 90.0,
+    "rows": [
+      {
+        "minimum_running_percent": 100.0,
+        "missing_required_events": [],
+        "path": "overhead_pmu_inspectprebuilt.csv",
+        "unavailable_events": [
+          "LLC-load-misses",
+          "LLC-loads"
+        ],
+        "valid": true
+      },
+      {
+        "minimum_running_percent": 100.0,
+        "missing_required_events": [],
+        "path": "overhead_pmu_fulldirect.csv",
+        "unavailable_events": [
+          "LLC-load-misses",
+          "LLC-loads"
+        ],
+        "valid": true
+      }
+    ],
+    "schema": 1,
+    "valid": true
+  },
+  "overhead_sampling_plan": {
+    "calibrated_rate_ceiling": 5623,
+    "duration_overridden": false,
+    "duration_safety_factor": 1.1,
+    "fixed_connections": 10,
+    "fixed_duration_seconds": 22,
+    "fixed_rate": 5623,
+    "limiting_engine": "luminawaf",
+    "limiting_engine_rps": 9373.02,
+    "minimum_achieved_rate_fraction": 0.9,
+    "projected_accepted_at_qualification_floor": 111335,
+    "qualified_sampling": true,
+    "rate_overridden": false,
+    "saturation_load_fraction": 0.6,
+    "schema": 1,
+    "stable_saturation_rps": {
+      "baseline": 42898.88,
+      "luminawaf": 9373.02,
+      "luminawaf-loaded-off": 43035.69
+    },
+    "target_accepted_per_run": 100000
+  },
+  "phases": {
+    "artifacts": "passed",
+    "coraza_crs": "passed",
+    "e2e": "passed",
+    "execution_preflight": "passed",
+    "lumina_crs": "passed",
+    "manifest": "passed",
+    "micro": "passed",
+    "outcome_matrix": "passed",
+    "overhead": "passed",
+    "scaling": "passed"
+  },
+  "pmu_qualification": {
+    "required_minimum_running_percent": 90.0,
+    "rows": [
+      {
+        "minimum_running_percent": 100.0,
+        "missing_required_events": [],
+        "path": "pmu_luminawaf.csv",
+        "unavailable_events": [
+          "LLC-load-misses",
+          "LLC-loads"
+        ],
+        "valid": true
+      },
+      {
+        "minimum_running_percent": 100.0,
+        "missing_required_events": [],
+        "path": "pmu_modsecurity.csv",
+        "unavailable_events": [
+          "LLC-load-misses",
+          "LLC-loads"
+        ],
+        "valid": true
+      },
+      {
+        "minimum_running_percent": 100.0,
+        "missing_required_events": [],
+        "path": "pmu_coraza.csv",
+        "unavailable_events": [
+          "LLC-load-misses",
+          "LLC-loads"
+        ],
+        "valid": true
+      }
+    ],
+    "schema": 1,
+    "valid": true
+  },
+  "protocol": "V1.0",
+  "sampling_plan": {
+    "calibrated_rate_ceiling": 422,
+    "duration_overridden": false,
+    "duration_safety_factor": 1.1,
+    "estimated_e2e_wall_seconds": 10250,
+    "fixed_duration_seconds": 290,
+    "fixed_rate": 422,
+    "limiting_engine": "modsecurity",
+    "limiting_engine_rps": 704.01,
+    "minimum_achieved_rate_fraction": 0.9,
+    "projected_accepted_at_qualification_floor": 110142,
+    "qualified_sampling": true,
+    "rate_overridden": false,
+    "repetitions": 5,
+    "saturation_load_fraction": 0.6,
+    "schema": 1,
+    "stable_saturation_rps": {
+      "baseline": 43126.94,
+      "coraza": 774.17,
+      "luminawaf": 9570.88,
+      "modsecurity": 704.01,
+      "naxsi": 29600.56
+    },
+    "target_accepted_per_run": 100000
+  },
+  "scaling_qualification": {
+    "errors": [],
+    "max_client_utilization_percent": 90.0,
+    "plan": {
+      "client_cpu_pool": "9,10,11,12,13,14,15",
+      "connection_sweep": "10,50,100,200",
+      "duration": "30s",
+      "estimated_wall_seconds": 12000,
+      "max_client_utilization_percent": 90.0,
+      "points": [
+        {
+          "client_cpu": "9,10,11,12,13,14,15",
+          "client_threads": 7,
+          "server_cpu": "1",
+          "workers": 1
+        },
+        {
+          "client_cpu": "9,10,11,12,13,14,15",
+          "client_threads": 7,
+          "server_cpu": "1,2",
+          "workers": 2
+        },
+        {
+          "client_cpu": "9,10,11,12,13,14,15",
+          "client_threads": 7,
+          "server_cpu": "1,2,3,4",
+          "workers": 4
+        },
+        {
+          "client_cpu": "9,10,11,12,13,14,15",
+          "client_threads": 7,
+          "server_cpu": "1,2,3,4,5,6,7,8",
+          "workers": 8
+        }
+      ],
+      "repetitions": 5,
+      "schema": 1,
+      "server_cpu_pool": "1,2,3,4,5,6,7,8"
+    },
+    "requested": true,
+    "rows": [
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 13.924487619047643,
+        "client_cpu_utilization_percent": 13.807245238095254,
+        "client_threads": 7,
+        "connections": 10,
+        "engine": "baseline",
+        "qualification_scope": "diagnostic",
+        "qualified": true,
+        "rps": 43250.5,
+        "rps_cv_percent": 0.3246691004414359,
+        "rps_per_worker": 43250.5,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.0,
+        "server_cpu": "1",
+        "server_cpu_ns_per_request": 23113.65249479962,
+        "speedup": 1.0,
+        "table": "baseline",
+        "workers": 1
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 0.32435666666666224,
+        "client_cpu_utilization_percent": 0.32228761904759395,
+        "client_threads": 7,
+        "connections": 50,
+        "engine": "coraza",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 769.42,
+        "rps_cv_percent": 0.295701088502951,
+        "rps_per_worker": 769.42,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.0,
+        "server_cpu": "1",
+        "server_cpu_ns_per_request": 1299792.1718046416,
+        "speedup": 1.0,
+        "table": "crs",
+        "workers": 1
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 3.1379200000000043,
+        "client_cpu_utilization_percent": 3.090317619047618,
+        "client_threads": 7,
+        "connections": 50,
+        "engine": "luminawaf",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 9481.07,
+        "rps_cv_percent": 0.5523019818036182,
+        "rps_per_worker": 9481.07,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.0,
+        "server_cpu": "1",
+        "server_cpu_ns_per_request": 105473.29427435709,
+        "speedup": 1.0,
+        "table": "crs",
+        "workers": 1
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 0.28934238095238085,
+        "client_cpu_utilization_percent": 0.28901047619050196,
+        "client_threads": 7,
+        "connections": 10,
+        "engine": "modsecurity",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 704.81,
+        "rps_cv_percent": 0.1313342452021976,
+        "rps_per_worker": 704.81,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.0,
+        "server_cpu": "1",
+        "server_cpu_ns_per_request": 1418308.993808781,
+        "speedup": 1.0,
+        "table": "crs",
+        "workers": 1
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 9.48118714285713,
+        "client_cpu_utilization_percent": 9.435544285714254,
+        "client_threads": 7,
+        "connections": 10,
+        "engine": "naxsi",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 29594.95,
+        "rps_cv_percent": 0.4228800283102876,
+        "rps_per_worker": 29594.95,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.0,
+        "server_cpu": "1",
+        "server_cpu_ns_per_request": 33779.08099345748,
+        "speedup": 1.0,
+        "table": "native-waf",
+        "workers": 1
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 26.700896190476186,
+        "client_cpu_utilization_percent": 26.39025857142867,
+        "client_threads": 7,
+        "connections": 50,
+        "engine": "baseline",
+        "qualification_scope": "diagnostic",
+        "qualified": true,
+        "rps": 86279.31,
+        "rps_cv_percent": 0.877112891235889,
+        "rps_per_worker": 43139.655,
+        "runs": 5,
+        "scaling_efficiency_percent": 99.74371394550352,
+        "server_cpu": "1,2",
+        "server_cpu_ns_per_request": 23172.81149198944,
+        "speedup": 1.9948742789100704,
+        "table": "baseline",
+        "workers": 2
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 0.5711828571427954,
+        "client_cpu_utilization_percent": 0.5687590476190962,
+        "client_threads": 7,
+        "connections": 10,
+        "engine": "coraza",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 1537.86,
+        "rps_cv_percent": 0.3449322097652796,
+        "rps_per_worker": 768.93,
+        "runs": 5,
+        "scaling_efficiency_percent": 99.93631566634608,
+        "server_cpu": "1,2",
+        "server_cpu_ns_per_request": 1282595.5124317768,
+        "speedup": 1.9987263133269215,
+        "table": "crs",
+        "workers": 2
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 6.121861428571373,
+        "client_cpu_utilization_percent": 6.085312857142856,
+        "client_threads": 7,
+        "connections": 100,
+        "engine": "luminawaf",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 18970.22,
+        "rps_cv_percent": 0.6703473325410426,
+        "rps_per_worker": 9485.11,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.04261122426057,
+        "server_cpu": "1,2",
+        "server_cpu_ns_per_request": 104212.60707226004,
+        "speedup": 2.0008522244852114,
+        "table": "crs",
+        "workers": 2
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 0.5279100000000523,
+        "client_cpu_utilization_percent": 0.5248466666666644,
+        "client_threads": 7,
+        "connections": 10,
+        "engine": "modsecurity",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 1417.08,
+        "rps_cv_percent": 0.5289320444090816,
+        "rps_per_worker": 708.54,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.52922064102383,
+        "server_cpu": "1,2",
+        "server_cpu_ns_per_request": 1410639.1481159355,
+        "speedup": 2.0105844128204766,
+        "table": "crs",
+        "workers": 2
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 18.58925761904759,
+        "client_cpu_utilization_percent": 18.34598571428571,
+        "client_threads": 7,
+        "connections": 100,
+        "engine": "naxsi",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 59124.73,
+        "rps_cv_percent": 0.7741141953356478,
+        "rps_per_worker": 29562.365,
+        "runs": 5,
+        "scaling_efficiency_percent": 99.88989675603439,
+        "server_cpu": "1,2",
+        "server_cpu_ns_per_request": 33818.75440436171,
+        "speedup": 1.9977979351206878,
+        "table": "native-waf",
+        "workers": 2
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 50.222323809523786,
+        "client_cpu_utilization_percent": 49.31771047619046,
+        "client_threads": 7,
+        "connections": 50,
+        "engine": "baseline",
+        "qualification_scope": "diagnostic",
+        "qualified": true,
+        "rps": 170360.71,
+        "rps_cv_percent": 0.9308399312861507,
+        "rps_per_worker": 42590.1775,
+        "runs": 5,
+        "scaling_efficiency_percent": 98.47326042473496,
+        "server_cpu": "1,2,3,4",
+        "server_cpu_ns_per_request": 23452.39267644142,
+        "speedup": 3.9389304169893986,
+        "table": "baseline",
+        "workers": 4
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 1.0612114285714553,
+        "client_cpu_utilization_percent": 1.060918095238213,
+        "client_threads": 7,
+        "connections": 50,
+        "engine": "coraza",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 3048.48,
+        "rps_cv_percent": 0.653010591069016,
+        "rps_per_worker": 762.12,
+        "runs": 5,
+        "scaling_efficiency_percent": 99.05123339658445,
+        "server_cpu": "1,2,3,4",
+        "server_cpu_ns_per_request": 1312068.3626191102,
+        "speedup": 3.962049335863378,
+        "table": "crs",
+        "workers": 4
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 12.154279523809757,
+        "client_cpu_utilization_percent": 11.996490952380901,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "luminawaf",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 38068.05,
+        "rps_cv_percent": 0.5644747398072515,
+        "rps_per_worker": 9517.0125,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.37909750692697,
+        "server_cpu": "1,2,3,4",
+        "server_cpu_ns_per_request": 104974.69827187715,
+        "speedup": 4.015163900277079,
+        "table": "crs",
+        "workers": 4
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 1.016177619047821,
+        "client_cpu_utilization_percent": 1.013865238095323,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "modsecurity",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 2839.06,
+        "rps_cv_percent": 0.38235758125349584,
+        "rps_per_worker": 709.765,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.70302634752628,
+        "server_cpu": "1,2,3,4",
+        "server_cpu_ns_per_request": 1409309.4149372727,
+        "speedup": 4.028121053901051,
+        "table": "crs",
+        "workers": 4
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 35.26967190476192,
+        "client_cpu_utilization_percent": 34.90917952380966,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "naxsi",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 117233.56,
+        "rps_cv_percent": 0.4543868755640666,
+        "rps_per_worker": 29308.39,
+        "runs": 5,
+        "scaling_efficiency_percent": 99.03172669661546,
+        "server_cpu": "1,2,3,4",
+        "server_cpu_ns_per_request": 34065.273825853335,
+        "speedup": 3.9612690678646185,
+        "table": "native-waf",
+        "workers": 4
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 86.72947904761908,
+        "client_cpu_utilization_percent": 86.11446428571418,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "baseline",
+        "qualification_scope": "diagnostic",
+        "qualified": true,
+        "rps": 341652.43,
+        "rps_cv_percent": 0.5243956702640284,
+        "rps_per_worker": 42706.55375,
+        "runs": 5,
+        "scaling_efficiency_percent": 98.74233534872428,
+        "server_cpu": "1,2,3,4,5,6,7,8",
+        "server_cpu_ns_per_request": 23352.577433881124,
+        "speedup": 7.899386827897943,
+        "table": "baseline",
+        "workers": 8
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 2.042607619047582,
+        "client_cpu_utilization_percent": 2.0205590476187005,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "coraza",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 6047.31,
+        "rps_cv_percent": 0.24830041881662052,
+        "rps_per_worker": 755.91375,
+        "runs": 5,
+        "scaling_efficiency_percent": 98.2446193236464,
+        "server_cpu": "1,2,3,4,5,6,7,8",
+        "server_cpu_ns_per_request": 1321928.1185790729,
+        "speedup": 7.859569545891712,
+        "table": "crs",
+        "workers": 8
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 23.200902380952225,
+        "client_cpu_utilization_percent": 23.010957142857176,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "luminawaf",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 75966.78,
+        "rps_cv_percent": 0.949924705302588,
+        "rps_per_worker": 9495.8475,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.15586320953227,
+        "server_cpu": "1,2,3,4,5,6,7,8",
+        "server_cpu_ns_per_request": 105203.6302993803,
+        "speedup": 8.012469056762582,
+        "table": "crs",
+        "workers": 8
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 1.914459047619251,
+        "client_cpu_utilization_percent": 1.9004104761898775,
+        "client_threads": 7,
+        "connections": 100,
+        "engine": "modsecurity",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 5682.75,
+        "rps_cv_percent": 0.2928885161318521,
+        "rps_per_worker": 710.34375,
+        "runs": 5,
+        "scaling_efficiency_percent": 100.78514067621063,
+        "server_cpu": "1,2,3,4,5,6,7,8",
+        "server_cpu_ns_per_request": 1407173.873551835,
+        "speedup": 8.06281125409685,
+        "table": "crs",
+        "workers": 8
+      },
+      {
+        "client_cpu": "9,10,11,12,13,14,15",
+        "client_cpu_utilization_max_percent": 63.77066952380942,
+        "client_cpu_utilization_percent": 63.516257619047835,
+        "client_threads": 7,
+        "connections": 200,
+        "engine": "naxsi",
+        "qualification_scope": "blocking",
+        "qualified": true,
+        "rps": 233927.27,
+        "rps_cv_percent": 0.31631344494828806,
+        "rps_per_worker": 29240.90875,
+        "runs": 5,
+        "scaling_efficiency_percent": 98.80371059927452,
+        "server_cpu": "1,2,3,4,5,6,7,8",
+        "server_cpu_ns_per_request": 34118.34500887472,
+        "speedup": 7.904296847941962,
+        "table": "native-waf",
+        "workers": 8
+      }
+    ],
+    "schema": 1,
+    "valid": true,
+    "warnings": [],
+    "worker_points": [
+      1,
+      2,
+      4,
+      8
+    ]
+  },
+  "schema": 1,
+  "validity_reason": "all canonical phases passed"
+}

@@ -1,0 +1,25 @@
+{
+  "calibrated_rate_ceiling": 422,
+  "duration_overridden": false,
+  "duration_safety_factor": 1.1,
+  "estimated_e2e_wall_seconds": 10250,
+  "fixed_duration_seconds": 290,
+  "fixed_rate": 422,
+  "limiting_engine": "modsecurity",
+  "limiting_engine_rps": 704.01,
+  "minimum_achieved_rate_fraction": 0.9,
+  "projected_accepted_at_qualification_floor": 110142,
+  "qualified_sampling": true,
+  "rate_overridden": false,
+  "repetitions": 5,
+  "saturation_load_fraction": 0.6,
+  "schema": 1,
+  "stable_saturation_rps": {
+    "baseline": 43126.94,
+    "coraza": 774.17,
+    "luminawaf": 9570.88,
+    "modsecurity": 704.01,
+    "naxsi": 29600.56
+  },
+  "target_accepted_per_run": 100000
+}

@@ -1,0 +1,14 @@
+{
+  "contract": "LuminaWAF must contain no legacy SQL classifier reference or comparator runtime dependency",
+  "dt_needed": [
+    "ld-linux-x86-64.so.2",
+    "libc.so.6"
+  ],
+  "forbidden_dt_needed": [],
+  "legacy_libinjection_relocations": [],
+  "legacy_libinjection_symbols": [],
+  "library": "/srv/lumina-canonical/LuminaWAF/build/libluminawaf.so",
+  "schema": 3,
+  "sha256": "9cb8c3b6b7ea6f0136f1aff7a11ce230b7e1cbb8c2f104958596b9f8eec9be32",
+  "valid": true
+}

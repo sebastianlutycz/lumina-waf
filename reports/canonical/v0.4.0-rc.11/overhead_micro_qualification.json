@@ -1,0 +1,49 @@
+{
+  "cpu_set": "1",
+  "errors": [],
+  "processes": [
+    {
+      "path": "overhead_micro.json",
+      "raw_repetitions": {
+        "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+        "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+        "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+      }
+    },
+    {
+      "path": "overhead_micro_process_01.json",
+      "raw_repetitions": {
+        "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+        "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+        "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+      }
+    },
+    {
+      "path": "overhead_micro_process_02.json",
+      "raw_repetitions": {
+        "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+        "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+        "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+      }
+    },
+    {
+      "path": "overhead_micro_process_03.json",
+      "raw_repetitions": {
+        "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+        "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+        "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+      }
+    },
+    {
+      "path": "overhead_micro_process_04.json",
+      "raw_repetitions": {
+        "Overhead/LuminaWAF/BundleBuild/AllowRotation": 10,
+        "Overhead/LuminaWAF/FullDirect/AllowRotation": 10,
+        "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation": 10
+      }
+    }
+  ],
+  "required_processes": 5,
+  "required_repetitions": 10,
+  "valid": true
+}

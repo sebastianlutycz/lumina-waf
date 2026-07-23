@@ -1,0 +1,594 @@
+{
+  "results": [
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "allow_get_search",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": "sqli",
+      "class": "attack",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "attack_get_sqli",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": "xss",
+      "class": "attack",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "attack_get_xss",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": "lfi",
+      "class": "attack",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "attack_get_lfi",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": "rce",
+      "class": "attack",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "attack_get_rce",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": "rfi",
+      "class": "attack",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "attack_get_rfi",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "allow_product_detail",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "allow_api_page",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "allow_encoded_search",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "allow_static_asset",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "baseline",
+      "passed": true,
+      "request_id": "allow_health",
+      "status": 200,
+      "table": "baseline"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "allow_get_search",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "sqli",
+      "class": "attack",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "attack_get_sqli",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "xss",
+      "class": "attack",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "attack_get_xss",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "lfi",
+      "class": "attack",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "attack_get_lfi",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "rce",
+      "class": "attack",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "attack_get_rce",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "rfi",
+      "class": "attack",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "attack_get_rfi",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "allow_product_detail",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "allow_api_page",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "allow_encoded_search",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "allow_static_asset",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "luminawaf",
+      "passed": true,
+      "request_id": "allow_health",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "allow_get_search",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "sqli",
+      "class": "attack",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "attack_get_sqli",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "xss",
+      "class": "attack",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "attack_get_xss",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "lfi",
+      "class": "attack",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "attack_get_lfi",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "rce",
+      "class": "attack",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "attack_get_rce",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "rfi",
+      "class": "attack",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "attack_get_rfi",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "allow_product_detail",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "allow_api_page",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "allow_encoded_search",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "allow_static_asset",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "modsecurity",
+      "passed": true,
+      "request_id": "allow_health",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "allow_get_search",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "sqli",
+      "class": "attack",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "attack_get_sqli",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "xss",
+      "class": "attack",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "attack_get_xss",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "lfi",
+      "class": "attack",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "attack_get_lfi",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "rce",
+      "class": "attack",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "attack_get_rce",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": true,
+      "category": "rfi",
+      "class": "attack",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "attack_get_rfi",
+      "status": 403,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "allow_product_detail",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "allow_api_page",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "allow_encoded_search",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "allow_static_asset",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "coraza",
+      "passed": true,
+      "request_id": "allow_health",
+      "status": 200,
+      "table": "crs"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "allow_get_search",
+      "status": 200,
+      "table": "native-waf"
+    },
+    {
+      "blocked": true,
+      "category": "sqli",
+      "class": "attack",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "attack_get_sqli",
+      "status": 403,
+      "table": "native-waf"
+    },
+    {
+      "blocked": true,
+      "category": "xss",
+      "class": "attack",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "attack_get_xss",
+      "status": 403,
+      "table": "native-waf"
+    },
+    {
+      "blocked": true,
+      "category": "lfi",
+      "class": "attack",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "attack_get_lfi",
+      "status": 403,
+      "table": "native-waf"
+    },
+    {
+      "blocked": true,
+      "category": "rce",
+      "class": "attack",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "attack_get_rce",
+      "status": 403,
+      "table": "native-waf"
+    },
+    {
+      "blocked": true,
+      "category": "rfi",
+      "class": "attack",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "attack_get_rfi",
+      "status": 403,
+      "table": "native-waf"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "allow_product_detail",
+      "status": 200,
+      "table": "native-waf"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "allow_api_page",
+      "status": 200,
+      "table": "native-waf"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "allow_encoded_search",
+      "status": 200,
+      "table": "native-waf"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "allow_static_asset",
+      "status": 200,
+      "table": "native-waf"
+    },
+    {
+      "blocked": false,
+      "category": null,
+      "class": "allow",
+      "engine": "naxsi",
+      "passed": true,
+      "request_id": "allow_health",
+      "status": 200,
+      "table": "native-waf"
+    }
+  ],
+  "schema": 1,
+  "summary": [
+    {
+      "attack_detection_percent": 0.0,
+      "engine": "baseline",
+      "false_positive_percent": 0.0,
+      "passed_contract": true,
+      "table": "baseline"
+    },
+    {
+      "attack_detection_percent": 100.0,
+      "engine": "luminawaf",
+      "false_positive_percent": 0.0,
+      "passed_contract": true,
+      "table": "crs"
+    },
+    {
+      "attack_detection_percent": 100.0,
+      "engine": "modsecurity",
+      "false_positive_percent": 0.0,
+      "passed_contract": true,
+      "table": "crs"
+    },
+    {
+      "attack_detection_percent": 100.0,
+      "engine": "coraza",
+      "false_positive_percent": 0.0,
+      "passed_contract": true,
+      "table": "crs"
+    },
+    {
+      "attack_detection_percent": 100.0,
+      "engine": "naxsi",
+      "false_positive_percent": 0.0,
+      "passed_contract": true,
+      "table": "native-waf"
+    }
+  ],
+  "valid": true,
+  "workload_sha256": "279e86a07fc480cb736122719e94ca4a8d34a56819e480201787deeda9032b01"
+}

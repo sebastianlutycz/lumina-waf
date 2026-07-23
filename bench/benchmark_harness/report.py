@@ -649,6 +649,12 @@ def render(result_dir: Path) -> str:
     scaling_raw = load(scaling_path) if scaling_path.exists() else {}
     scaling = scaling_raw.get("rows", []) if scaling_raw else []
     scaling_plan = scaling_raw.get("plan", {}) if scaling_raw else {}
+    scaling_client_limit = float(
+        scaling_raw.get(
+            "max_client_utilization_percent",
+            scaling_plan.get("max_client_utilization_percent", 90.0),
+        )
+    )
     scaling_worker_points = [
         item.get("workers") for item in scaling_plan.get("points", [])
     ]
@@ -773,7 +779,8 @@ def render(result_dir: Path) -> str:
         f"| Lumina overhead decomposition | {run.get('phases', {}).get('overhead', 'not-run')} | paired E0/E1/E2 + direct kernels | "
         f"{'PASS' if overhead_qualified else 'NOT QUALIFIED'} |",
         f"| Multi-worker scaling | {run.get('phases', {}).get('scaling', 'not-requested')} | "
-        f"1/2/4/8 workers, >=5 runs, CV <=5%, client CPU <=85% | "
+        f"1/2/4/8 workers, >=5 runs, CV <=5%, "
+        f"client CPU <={scaling_client_limit:g}% | "
         f"{'PASS' if scaling_qualified else 'NOT REQUESTED' if not scaling_requested else 'NOT QUALIFIED'} |",
         "",
         "## Sampling Plan",

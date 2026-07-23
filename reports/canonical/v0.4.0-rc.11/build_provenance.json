@@ -1,0 +1,54 @@
+{
+  "build_command": [
+    "cmake",
+    "--build",
+    "/srv/lumina-canonical/LuminaWAF/build",
+    "-j",
+    "16",
+    "--target",
+    "lumina_benchmark_harness",
+    "--clean-first",
+    "--verbose"
+  ],
+  "build_type": "Release",
+  "c_compiler": {
+    "path": "/usr/bin/cc",
+    "version": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+  },
+  "cmake_version": "cmake version 3.28.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+  "configure_command": [
+    "cmake",
+    "-S",
+    ".",
+    "-B",
+    "/srv/lumina-canonical/LuminaWAF/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    "-DLUMINA_BENCH_V1_BENCHMARK_ROOT=/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/prefix",
+    "-DLUMINA_BENCH_V1_MODSEC_ROOT=/srv/lumina-canonical/LuminaWAF/.cache/benchmark_harness_v1/prefix"
+  ],
+  "cxx_compiler": {
+    "path": "/usr/bin/c++",
+    "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+  },
+  "effective_compile_commands": 29,
+  "environment_flags": {
+    "CFLAGS": "",
+    "CPPFLAGS": "",
+    "CXXFLAGS": "",
+    "LDFLAGS": ""
+  },
+  "retained": {
+    "cmake_cache": {
+      "bytes": 15598,
+      "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/CMakeCache.txt",
+      "sha256": "d942c7b51613918be4295d344b35363d9d7735d5e4b67d65636fed2cbd1a98a4"
+    },
+    "compile_commands": {
+      "bytes": 15085,
+      "path": "/srv/lumina-canonical/results/v0.4.0-rc.11-canonical-20260723T071816Z/compile_commands.json",
+      "sha256": "c651fc2f0680a7410539f0714146aeba208646b7e8e85cf5ad5af2de496dd58e"
+    }
+  },
+  "schema": 1
+}
