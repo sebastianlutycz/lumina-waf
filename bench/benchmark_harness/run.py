@@ -1025,7 +1025,8 @@ def main() -> int:
         "manifest": "passed", "artifacts": "passed", "micro": "passed",
         "lumina_crs": "not-run",
         "coraza_crs": "not-run", "outcome_matrix": "not-run", "e2e": "not-run",
-        "overhead": "not-run", "scaling": "not-requested",
+        "execution_preflight": "not-run", "overhead": "not-run",
+        "scaling": "not-requested",
     }
     if publication_data:
         parity_env = env.copy()
@@ -1112,8 +1113,37 @@ def main() -> int:
         "--client-cpu",
         os.environ.get("LUMINA_BENCH_V1_CLIENT_CPU", "2"),
     ]
+    e2e_preflight_common = list(e2e_common)
     if publication_data:
         e2e_common.append("--canonical")
+    configured_threads = os.environ.get("LUMINA_BENCH_V1_THREADS", "1")
+    execute(
+        [
+            *e2e_preflight_common,
+            "--adapter-set", "overhead",
+            "--mode", "saturation",
+            "--output", str(result / "e2e_execution_preflight"),
+            "--duration", "1s",
+            "--repetitions", "1",
+            "--threads", configured_threads,
+            "--connections-sweep", "1",
+        ],
+        cwd=ROOT, log=result / "e2e_execution_preflight.log", env=env,
+    )
+    execution_preflight = json.loads(
+        (result / "e2e_execution_preflight/results.json").read_text(encoding="utf-8")
+    )
+    expected_preflight_threads = min(int(configured_threads), 1)
+    if (
+        not execution_preflight.get("valid")
+        or len(execution_preflight.get("results", [])) != 3
+        or any(
+            int(item.get("client_threads", -1)) != expected_preflight_threads
+            for item in execution_preflight.get("results", [])
+        )
+    ):
+        raise RuntimeError("E0/E1/E2 single-connection execution preflight failed")
+    phases["execution_preflight"] = "passed"
     repetitions = os.environ.get(
         "LUMINA_BENCH_V1_REPETITIONS", "5" if publication_data else ("1" if args.mode == "smoke" else "3")
     )
@@ -1364,7 +1394,7 @@ def main() -> int:
     phases["artifacts"] = "passed" if artifact_postflight["valid"] else "invalid"
     required_phase_names = (
         "manifest", "artifacts", "micro", "lumina_crs", "coraza_crs",
-        "outcome_matrix", "e2e", "overhead",
+        "outcome_matrix", "execution_preflight", "e2e", "overhead",
     )
     if scaling_requested:
         required_phase_names += ("scaling",)

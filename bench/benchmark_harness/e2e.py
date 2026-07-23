@@ -483,8 +483,15 @@ class NginxLeg:
 def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: int,
             connections: int, rate: int | None, script: Path) -> LoadRun:
     client_cpus = parse_cpu_set(client_cpu)
+    if threads < 1:
+        raise RuntimeError("load-generator threads must be positive")
     if threads > len(client_cpus):
         raise RuntimeError("load-generator threads exceed the client CPU allocation")
+    if connections < threads:
+        raise RuntimeError(
+            f"load-generator connections ({connections}) must be >= threads ({threads})"
+        )
+    assigned_cpus = client_cpus[:threads]
     command = [
         "taskset", "-c", client_cpu, str(binary), f"-t{threads}", f"-c{connections}",
         f"-d{duration}", "-L", "-s", str(script),
@@ -496,13 +503,28 @@ def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: in
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     try:
-        affinity = pin_load_generator_threads(process, client_cpus, threads)
+        affinity = pin_load_generator_threads(process, assigned_cpus, threads)
         stdout, stderr = process.communicate()
-    except BaseException:
-        process.terminate()
-        process.communicate()
+    except BaseException as error:
+        if process.poll() is None:
+            process.terminate()
+        stdout, stderr = process.communicate()
+        if isinstance(error, RuntimeError):
+            detail = (stderr or stdout).strip().replace("\n", " ")
+            suffix = f"; output={detail}" if detail else ""
+            raise RuntimeError(
+                f"{error}; exit={process.returncode}{suffix}"
+            ) from error
         raise
     return LoadRun(process.returncode, stdout, stderr, affinity)
+
+
+def effective_load_threads(configured_threads: int, connections: int) -> int:
+    if configured_threads < 1:
+        raise RuntimeError("load-generator threads must be positive")
+    if connections < 1:
+        raise RuntimeError("load-generator connections must be positive")
+    return min(configured_threads, connections)
 
 
 def write_wrk_script(workload: Path, destination: Path) -> int:
@@ -621,6 +643,8 @@ def main() -> int:
         raise RuntimeError("server and load-generator CPU sets must be disjoint")
     if args.workers > len(server_cpus):
         raise RuntimeError("NGINX workers exceed the server CPU allocation")
+    if args.threads < 1:
+        raise RuntimeError("load-generator threads must be positive")
     if args.threads > len(client_cpus):
         raise RuntimeError("load-generator threads exceed the client CPU allocation")
     if args.canonical and args.repetitions < 5:
@@ -644,6 +668,7 @@ def main() -> int:
     expected_response_contract: dict[str, dict[str, Any]] | None = None
     for repetition in range(args.repetitions):
         for connections in connection_points:
+            client_threads = effective_load_threads(args.threads, connections)
             for adapter in rotated_order(engines, repetition):
                 config = args.output / f"nginx_{adapter.name}_{repetition}_{connections}.conf"
                 render_config(adapter, config, args.port, args.workers, args.workload)
@@ -670,7 +695,7 @@ def main() -> int:
                         )
                         warmup = run_wrk(
                             binary, args.client_cpu, args.port, args.warmup_duration,
-                            args.threads, connections, args.rate, wrk_script,
+                            client_threads, connections, args.rate, wrk_script,
                         )
                         warmup_path.write_text(
                             warmup.stdout + warmup.stderr, encoding="utf-8"
@@ -684,7 +709,7 @@ def main() -> int:
                     cpu_before = leg.cpu_seconds()
                     client_cpu_before = child_cpu_seconds()
                     process = run_wrk(
-                        binary, args.client_cpu, args.port, args.duration, args.threads,
+                        binary, args.client_cpu, args.port, args.duration, client_threads,
                         connections, args.rate if args.mode == "fixed" else None, wrk_script,
                     )
                     client_cpu_seconds = max(0.0, child_cpu_seconds() - client_cpu_before)
@@ -708,7 +733,8 @@ def main() -> int:
                             "server_cpu": args.server_cpu,
                             "client_cpu": args.client_cpu,
                             "workers": args.workers,
-                            "client_threads": args.threads,
+                            "client_threads": client_threads,
+                            "configured_client_threads": args.threads,
                             "server_cpu_count": len(server_cpus),
                             "client_cpu_count": len(client_cpus),
                             "client_cpu_seconds": client_cpu_seconds,
@@ -818,6 +844,7 @@ def main() -> int:
         "client_cpu": args.client_cpu,
         "workers": args.workers,
         "client_threads": args.threads,
+        "client_thread_policy": "min(configured_threads, connections)",
         "server_cpu_count": len(server_cpus),
         "client_cpu_count": len(client_cpus),
         "connection_points": connection_points,

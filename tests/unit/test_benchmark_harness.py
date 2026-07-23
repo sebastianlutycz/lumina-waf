@@ -99,6 +99,33 @@ class BenchmarkHarnessTest(unittest.TestCase):
             ROOT / "bench/benchmark_harness/prepare_runtime.sh"
         ).read_text(encoding="utf-8"))
 
+    def test_load_threads_are_capped_by_connection_count(self):
+        self.assertEqual(e2e_module.effective_load_threads(2, 1), 1)
+        self.assertEqual(e2e_module.effective_load_threads(2, 10), 2)
+
+    def test_load_threads_reject_nonpositive_inputs(self):
+        with self.assertRaisesRegex(RuntimeError, "threads must be positive"):
+            e2e_module.effective_load_threads(0, 1)
+        with self.assertRaisesRegex(RuntimeError, "connections must be positive"):
+            e2e_module.effective_load_threads(1, 0)
+
+    def test_run_wrk_rejects_more_threads_than_connections_before_spawn(self):
+        with mock.patch.object(e2e_module.subprocess, "Popen") as popen:
+            with self.assertRaisesRegex(RuntimeError, r"connections \(1\) must be >= threads \(2\)"):
+                e2e_module.run_wrk(
+                    Path("/unused/wrk"), "0-1", 19090, "1s", 2, 1, None,
+                    Path("/unused/workload.lua"),
+                )
+        popen.assert_not_called()
+
+    def test_runner_preflights_single_connection_overhead_before_long_e2e(self):
+        runner = (ROOT / "bench/benchmark_harness/run.py").read_text(encoding="utf-8")
+        self.assertLess(
+            runner.index('str(result / "e2e_execution_preflight")'),
+            runner.index('str(result / "e2e_saturation")'),
+        )
+        self.assertIn('"--connections-sweep", "1"', runner)
+
     def test_nginx_runtime_prefix_is_materialized_from_source(self):
         with tempfile.TemporaryDirectory() as directory:
             prefix = Path(directory) / "test_nginx"
