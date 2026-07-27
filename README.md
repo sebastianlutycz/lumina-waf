@@ -17,6 +17,24 @@ The current release line is `v0.4.x`.
 >
 > It is **not** an audited, production-ready replacement for ModSecurity.
 
+## TL;DR for Reviewers
+
+Start here:
+
+1. **What it is:** LuminaWAF AOT-compiles the supported semantics of a pinned inbound OWASP CRS
+   PL2 policy into a native NGINX inspection dataplane.
+2. **Headline evidence:** `99.75%` correctness agreement across 3,986 tests in the pinned CRS PL2
+   regression gate, `55.47 us` direct allow-transaction CPU and `9,570.88` sustainable
+   single-worker RPS in the canonical run. These are different measurement boundaries.
+3. **Architecture:** read [Runtime Design](#runtime-design) and
+   [Execution Model](#execution-model).
+4. **Methodology:** start with [Reproducible Benchmark](#reproducible-benchmark), then use the
+   normative [V1.0 Protocol](methodology/README.md).
+5. **Canonical evidence:** inspect the [published evidence bundle](reports/canonical/v0.4.0-rc.11/)
+   and its [raw artifact index](reports/canonical/v0.4.0-rc.11/RAW/README.md).
+6. **Languages:** the inspection core and NGINX adapter are C/C++; Python is used for build-time
+   translation, generators, tests and benchmark orchestration.
+
 I built it independently over several months, mostly because I enjoy going one layer lower than is probably reasonable.
 
 Sometimes the best reason to build something is simply:
@@ -44,6 +62,26 @@ Instead of interpreting rule files on every request, LuminaWAF freezes a support
 * architecture-specific SIMD and scalar execution paths.
 
 At runtime, NGINX passes request data to the generated inspection dataplane and receives an allow or block decision together with matched-rule metadata.
+
+---
+
+## Implementation Languages
+
+GitHub's language bar measures repository source bytes, not the language executing on each request.
+The repository contains a substantial build-time compiler, code generators, regression tooling and
+benchmark orchestration, so Python is expected to occupy the largest share. Policy-specific
+generated C/C++ sources are materialized locally and intentionally remain outside the tracked
+release tree, which further biases repository language statistics toward the generator.
+
+| Language | Responsibility |
+|---|---|
+| **C and C++** | Core inspection runtime, generated execution units, native operators, transformation paths and NGINX integration |
+| **Python** | CRS parsing, semantic translation, AOT materialization, differential tests, artifact validation and benchmark orchestration |
+| **Shell and CMake** | Reproducible bootstrap, build configuration and release gates |
+
+No Python interpreter or Python runtime is present in the NGINX request path. The materialized
+policy is compiled into `libluminawaf.so`; its runtime dependency boundary is described in
+[Runtime Design](#runtime-design).
 
 ---
 
@@ -91,9 +129,12 @@ reserved for housekeeping. Every canonical phase passed, including artifact inte
 oracles, five-process microbenchmarks, fixed-rate latency, saturation, PMU, overhead decomposition
 and 1/2/4/8-worker scaling.
 
+The figures below apply to the exact `v0.4.0-rc.11` source tree. Later `v0.4.x` changes are not
+covered unless they are explicitly linked to a separate evidence bundle.
+
 Correctness against the pinned ModSecurity-compatible CRS PL2 expectations was:
 
-* **99.75% overall** across 3,986 selected tests;
+* **99.75% overall** across 3,986 tests in the pinned CRS PL2 regression gate;
 * **99.72% exact matched-rule agreement** (`3161/3170`);
 * **99.88% negative exclusion agreement** (`815/816`);
 * ten retained disagreements, with zero timeouts and zero exceptions.
@@ -109,9 +150,8 @@ Selected performance boundaries from the same canonical evidence are:
 | Eight-worker throughput | **75,966.78 RPS** | 5,682.75 RPS | 6,047.31 RPS |
 
 LuminaWAF's measured 1/2/4/8-worker speedups were `1.00x`, `2.00x`, `4.02x` and `8.01x`.
-Grouped PMU diagnostics for the direct allow transaction recorded `175,574` cycles, `553,171`
-instructions and IPC `3.151`, with every supported counter group running for `100%` of measured
-time. Unsupported LLC events remain reported as `unavailable`.
+The evidence bundle retains the PMU numerator/denominator pairs, confidence intervals, CV values
+and raw observations behind this summary.
 
 These are not universal performance claims. The fixed-rate and saturation rotation contains six
 HTTP/1.1 `GET` requests with empty bodies, so those rows cover URI, query-string and request-header
@@ -140,16 +180,8 @@ process-level confidence interval. The Haswell observations remain useful histor
 but they are not publication claims and must not be compared directly with the EPYC result as a
 cross-version speedup: the host, isolation and qualification class differ.
 
-Every number applies only to the exact:
-
-* LuminaWAF commit;
-* CRS source commit;
-* ordered include manifest;
-* workload hash;
-* engine configuration;
-* hardware profile;
-* measurement boundary;
-* qualification class.
+Every number is scoped to its recorded source commit, CRS manifest, workload, engine
+configuration, hardware, measurement boundary and qualification class.
 
 See:
 
@@ -169,7 +201,8 @@ The production inspection path follows these rules:
 * No runtime parsing of CRS `.conf` files.
 * No dynamically loaded regular-expression engine.
 * No dynamically loaded SQL injection classifier.
-* No heap allocation in the request-inspection hot path.
+* No heap allocation inside the core `libluminawaf` inspection path; NGINX adapter allocations are
+  outside this core-library claim.
 * Caller-owned request bytes.
 * Bounded thread-local transformation storage.
 * Generated finite-state matchers and routing tables.
@@ -187,26 +220,30 @@ NGINX, benchmark comparators, generators and build tools are development or inte
 
 ## Execution Model
 
-```text
-pinned OWASP CRS policy
-          │
-          ▼
-manifest and semantic inventory
-          │
-          ▼
-AOT translator and materializer
-          │
-          ▼
-generated matchers, routers and native operators
-          │
-          ▼
-libluminawaf.so
-          │
-          ▼
-NGINX request adapter
-          │
-          ▼
-allow / block decision and matched-rule metadata
+```mermaid
+flowchart LR
+    subgraph Build["Build time"]
+        A["Pinned OWASP CRS PL2 policy"] --> B["Manifest and semantic inventory"]
+        B --> C["AOT translator and materializer"]
+        C --> D["Generated matchers, routers and native operators"]
+        D --> E["Compile and link"]
+    end
+
+    subgraph Runtime["Request time"]
+        F["NGINX request"] --> G["Protocol-neutral NGINX adapter"]
+        G --> H["Caller-owned request view"]
+        H --> I["libluminawaf.so"]
+        I --> J["Allow / block and matched-rule metadata"]
+        I -. "uses" .-> K["Bounded transformation workspace"]
+    end
+
+    subgraph Evidence["Evidence pipeline"]
+        L["Pinned workloads and comparator manifests"] --> M["Benchmark Harness V1.0"]
+        I --> M
+        M --> N["Correctness, PMU, latency and saturation artifacts"]
+    end
+
+    E --> I
 ```
 
 Generated execution-unit counts do not map one-to-one to CRS source-rule counts.
@@ -392,37 +429,20 @@ The complete smoke pipeline can be started from a fresh clone with:
 ./bench/benchmark_harness/run.sh smoke
 ```
 
-The launcher:
+The launcher fetches pinned sources into `.cache/benchmark_harness_v1`, materializes the AOT
+runtime, builds the comparators and load generators, executes the requested evidence class and
+renders its report from retained artifacts. It does not replace system libraries or install
+packages with elevated privileges.
 
-* verifies required host commands;
-* initializes the pinned CRS submodule;
-* downloads exact pinned source revisions and verified archives;
-* materializes the AOT runtime;
-* builds pinned NGINX and WAF comparators;
-* builds `wrk`, `wrk2` and Google Benchmark;
-* generates isolated NGINX configurations;
-* executes the diagnostic evidence pipeline;
-* generates a Markdown report exclusively from retained artifacts.
+Available run classes are:
 
-The bootstrap installs into:
+| Mode | Purpose |
+|---|---|
+| `smoke` | Bounded diagnostic validation of the complete pipeline; not publication evidence |
+| `qualification` | Publication-sized evidence on a shared or non-isolated host; always `NON-CANONICAL` |
+| `canonical` | Fail-closed publication run requiring the complete V1.0 Protocol isolation, correctness, sampling and provenance gates |
 
-```text
-.cache/benchmark_harness_v1
-```
-
-It does not replace system libraries or install packages with elevated privileges.
-
-### Smoke
-
-```bash
-./bench/benchmark_harness/run.sh smoke
-```
-
-`smoke` verifies the complete pipeline.
-
-It is diagnostic and does not contain enough independent processes or request samples for publication-level confidence intervals or tail-latency claims.
-
-### Qualification
+Run a non-canonical qualification with an explicit host annotation:
 
 ```bash
 LUMINA_BENCH_V1_HOST_PROFILE=shared-loaded-homelab \
@@ -430,152 +450,23 @@ LUMINA_BENCH_V1_HOST_NOTE='Background services remained active; this is not a ca
 ./bench/benchmark_harness/run.sh qualification
 ```
 
-`qualification` executes the publication-sized evidence contract.
-
-A qualification run on a shared or non-isolated machine remains explicitly labeled `NON-CANONICAL`.
-
-An operator annotation never upgrades a run to canonical status.
-
-### Canonical
+Run canonical qualification only on a prepared, kernel-isolated host:
 
 ```bash
 ./bench/benchmark_harness/run.sh canonical
 ```
 
-Canonical mode is fail-closed.
+The README intentionally does not duplicate the protocol. The exact host gates, process counts,
+sample thresholds, PMU grouping, E2E configuration and validity rules are maintained in:
 
-It requires, among other gates:
+* [Benchmark Harness v1 operator guide](bench/benchmark_harness/README.md)
+* [Normative V1.0 Protocol](methodology/README.md)
+* [Published evidence contract](reports/README.md)
 
-* all pinned benchmark comparators;
-* the real pinned CRS PL2 policy;
-* complete correctness gates;
-* five independent Google Benchmark processes;
-* ten retained raw inner repetitions per process;
-* kernel-isolated benchmark CPUs;
-* non-overlapping SMT sibling placement;
-* at least 100,000 accepted fixed-rate responses per repetition;
-* raw percentile evidence;
-* stable saturation points;
-* retained compiler versions and effective per-file compile commands;
-* complete artifact and provenance hashes captured before measurement and revalidated afterward;
-* a recorded Lumina `DT_NEEDED` set and clean legacy SQL-classifier symbol/relocation audit.
-
-Affinity through `taskset` alone is not sufficient.
-
-Canonical mode verifies that every declared benchmark CPU is covered by the kernel-isolated CPU mask exposed through sysfs.
-Load-generator CPUs must be disjoint from server and microbenchmark CPUs, including SMT siblings.
-Server and microbenchmark CPU sets may overlap because their phases execute sequentially.
-
-See:
-
-* [LuminaWAF Benchmark Harness v1](bench/benchmark_harness/README.md)
-* [Normative methodology](methodology/README.md)
-
----
-
-## Measurement Classes
-
-The V1.0 Protocol intentionally separates different measurement boundaries.
-
-### Correctness
-
-The correctness gate retains:
-
-* positive block agreement;
-* exact matched-rule agreement where observable;
-* negative exclusions;
-* false-positive checks;
-* category coverage;
-* skips;
-* timeouts;
-* exceptions;
-* disagreements.
-
-LuminaWAF is evaluated against ModSecurity-compatible pinned expectations.
-
-The stock Coraza NGINX connector exposes the final HTTP verdict but does not export matched rule IDs. Its observable contract is therefore intentionally narrower.
-
-NAXSI is reported separately as a native-WAF implementation-class reference. It is never presented as a CRS-compatible engine.
-
-### Full Transaction CPU Time
-
-Google Benchmark executes the complete inbound transaction lifecycle exposed by each engine.
-
-This is an in-process CPU measurement.
-
-It is not NGINX end-to-end request latency.
-
-### Fixed-Rate E2E Latency
-
-`wrk2` is used for an allow-only fixed-rate workload with coordinated-omission resistance.
-
-The report retains:
-
-* p50;
-* p90;
-* p99;
-* p99.9;
-* maximum latency;
-* raw histogram evidence.
-
-### Saturation
-
-Closed-loop saturation measures maximum sustainable throughput.
-
-Queueing latency from saturation is never substituted for service latency.
-
-Canonical saturation points require:
-
-* five independent runs;
-* zero response errors;
-* RPS coefficient of variation no greater than 5%.
-
-### Controlled Scaling
-
-Synthetic rule-count experiments are isolated from the real CRS PL2 comparison and are always labeled synthetic.
-
-### LuminaWAF Overhead Decomposition
-
-The decomposition separates:
-
-* `E0`: plain NGINX;
-* `E1`: the identical Lumina module with `lumina_waf off`;
-* `E2`: production CRS PL2 inspection.
-
-The report derives paired server CPU/request differences at matching connection points.
-
-It also contains direct kernels for:
-
-* request-to-bundle projection;
-* inspection of a prebuilt bundle;
-* complete direct inspection;
-* integration residual.
-
-Latency percentiles are shown only as absolute context and are never subtracted.
-
----
-
-## PMU Diagnostics
-
-Qualified runs collect grouped hardware performance-counter diagnostics for the allow transaction:
-
-* cycles per transaction;
-* instructions per transaction;
-* IPC;
-* branch-miss rate;
-* generic cache-miss rate;
-* L1 data-cache misses;
-* LLC misses;
-* instruction-TLB misses;
-* minimum counter running percentage.
-
-Counter numerator and denominator pairs execute in separate small atomic groups.
-
-Unsupported cache events remain marked `unavailable` without suppressing supported IPC or branch metrics.
-
-The direct `InspectPrebuilt` and `FullDirect` kernels receive the same grouped PMU treatment.
-
-PMU results are diagnostic and are not treated as headline request-latency measurements.
+The report keeps correctness agreement, direct transaction CPU time, fixed-rate NGINX latency,
+closed-loop saturation, multi-worker scaling, PMU diagnostics and integration-overhead
+decomposition as separate measurement boundaries. Percentiles from different distributions are
+never subtracted, and smoke results remain diagnostic.
 
 ---
 
@@ -669,7 +560,7 @@ That is what the project is for.
 These are interesting experiments that are not allowed to block the main release, preferably.
 
 - [ ] Teach LuminaWAF to speak AVX-512
-- [ ] Run it on hardware younger than the first release of Docker
+- [x] Run it on hardware younger than the first release of Docker (AMD EPYC 9124)
 - [ ] Validate the NEON backend without accidentally buying another server
 - [ ] Measure NUMA scaling on a dual-socket machine
 - [ ] Add an API translation layer (SecLang -> C -> Atomic Flip, because even AOT needs to listen sometimes)
