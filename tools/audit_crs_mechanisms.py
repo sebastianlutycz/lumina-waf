@@ -70,6 +70,13 @@ RUNTIME_COVERED_IDS = {
     920430,  # REQUEST_PROTOCOL allowlist
     920620,  # duplicate Content-Type header count
     920660,  # obsolete Request-Range header count
+    921250,  # cookie-name selector plus exact value predicate
+    922120,  # multipart Content-Transfer-Encoding part header
+    922130,  # multipart part-header name contains a non-printable byte
+}
+
+RUNTIME_NATIVE_SCALAR_IDS = {
+    921250,
 }
 
 
@@ -215,6 +222,8 @@ def classify(rule: dict, refs: list[VarRef], effective_score_bearing: bool = Fal
     op = rule.get("operator") or ""
     bases = {r.base for r in refs}
 
+    if rid in RUNTIME_NATIVE_SCALAR_IDS:
+        return "C5_NATIVE_SCALAR"
     if rid in RUNTIME_COVERED_IDS:
         return "C4_STRUCTURAL_VALIDATOR"
     if rule.get("chain"):
@@ -270,7 +279,9 @@ def audit_rules(rules_dir: Path, pl: int, emitted_dir: Path | None = None) -> li
         emitted_current = rid in emitted
         direct_score = has_score(rule)
         chain_head_score = rid in scored_chain_heads
-        effective_score = direct_score or (chain_head_score and runtime_covered)
+        # A chain head owns the rule identity even when a later chain member
+        # carries the anomaly-score action.
+        effective_score = direct_score or chain_head_score
         out.append(
             RuleAudit(
                 rule_id=rid,

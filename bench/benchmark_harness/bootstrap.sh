@@ -83,12 +83,18 @@ clone_pin libcoraza https://github.com/corazawaf/libcoraza.git \
 clone_pin pcre2 https://github.com/PCRE2Project/pcre2.git \
     "$(jq -r '.pcre2_modsecurity_only.tag' "$PINS")" \
     "$(jq -r '.pcre2_modsecurity_only.commit' "$PINS")"
+git -C "$SOURCES/pcre2" submodule update --init --recursive
 cmake -S "$SOURCES/pcre2" -B "$CACHE/build-pcre2" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DBUILD_SHARED_LIBS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DPCRE2_BUILD_PCRE2GREP=OFF -DPCRE2_BUILD_TESTS=OFF \
+    -DPCRE2_SUPPORT_JIT=ON \
     -DPCRE2_BUILD_PCRE2_8=ON -DPCRE2_BUILD_PCRE2_16=OFF -DPCRE2_BUILD_PCRE2_32=OFF
 cmake --build "$CACHE/build-pcre2" -j"$(nproc)" --target install
+grep -Fqx "PCRE2_SUPPORT_JIT:BOOL=ON" "$CACHE/build-pcre2/CMakeCache.txt" || {
+    echo "pinned comparator PCRE2 was built without JIT support" >&2
+    exit 2
+}
 
 clone_pin modsecurity https://github.com/owasp-modsecurity/ModSecurity.git \
     "$(jq -r '.modsecurity.tag' "$PINS")" "$(jq -r '.modsecurity.commit' "$PINS")"
@@ -131,11 +137,14 @@ jq -n \
     --arg modsecurity_sha256 "$(sha256sum "$modsecurity_so" | cut -d' ' -f1)" \
     --arg pcre2_static_sha256 "$(sha256sum "$PREFIX/lib/libpcre2-8.a" | cut -d' ' -f1)" \
     --arg pcre2_shared_sha256 "$(sha256sum "$PREFIX/lib/libpcre2-8.so.0.14.0" | cut -d' ' -f1)" \
+    --argjson pcre2_jit true \
     --arg modsecurity_commit "$(git -C "$SOURCES/modsecurity" rev-parse HEAD)" \
     --arg pcre2_commit "$(git -C "$SOURCES/pcre2" rev-parse HEAD)" \
+    --arg pcre2_sljit_commit "$(git -C "$SOURCES/pcre2/deps/sljit" rev-parse HEAD)" \
     '{modsecurity_pcre2_linkage:$linkage,modsecurity_sha256:$modsecurity_sha256,
       pcre2_static_sha256:$pcre2_static_sha256,pcre2_shared_sha256:$pcre2_shared_sha256,
-      modsecurity_commit:$modsecurity_commit,pcre2_commit:$pcre2_commit}' \
+      pcre2_jit:$pcre2_jit,modsecurity_commit:$modsecurity_commit,
+      pcre2_commit:$pcre2_commit,pcre2_sljit_commit:$pcre2_sljit_commit}' \
     > "$CACHE/dependency_provenance.json"
 
 clone_pin modsecurity-nginx https://github.com/owasp-modsecurity/ModSecurity-nginx.git \
@@ -164,7 +173,7 @@ cmake -S "$ROOT" -B "$ROOT/build" -DCMAKE_BUILD_TYPE=Release \
 cmake --build "$ROOT/build" -j"$(nproc)" --target luminawaf lumina_benchmark_harness
 
 (cd "$SOURCES/nginx-$nginx_version" && \
-    ./configure --prefix="$PREFIX/nginx" --with-compat \
+    ./configure --prefix="$PREFIX/nginx" --with-compat --with-http_v2_module \
       --with-cc-opt="-O3 -DNDEBUG -Wno-error=unused-function -I$PREFIX/include" \
       --with-ld-opt="-L$PREFIX/lib -Wl,-rpath,$PREFIX/lib" \
       --add-dynamic-module="$ROOT/nginx_module" \

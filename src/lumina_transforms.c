@@ -2,6 +2,20 @@
 
 #include <string.h>
 
+#if defined(LUMINA_DATAPLANE_DIAGNOSTICS)
+#include "luminawaf.h"
+#define LUMINA_RECORD_TRANSFORM_STEP(transform, input_len, output_len) \
+    luminawaf_dataplane_record_transform_step( \
+        (uint32_t)(transform), (input_len), (output_len))
+#else
+#define LUMINA_RECORD_TRANSFORM_STEP(transform, input_len, output_len) \
+    do { \
+        (void)(transform); \
+        (void)(input_len); \
+        (void)(output_len); \
+    } while (0)
+#endif
+
 #if defined(__AVX2__)
 #include <immintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)
@@ -270,7 +284,15 @@ size_t lumina_transform_compress_ws(uint8_t *buf, size_t len) {
  * --------------------------------------------------------------------------*/
 size_t lumina_transform_remove_ws(uint8_t *buf, size_t len) {
     size_t o = 0;
-    for (size_t i = 0; i < len; i++) if (!is_ws(buf[i])) buf[o++] = buf[i];
+    for (size_t i = 0; i < len; i++) {
+        const uint8_t byte = buf[i];
+        const unsigned control_ws =
+            (unsigned)(byte - (uint8_t)'\t') <=
+            (unsigned)((uint8_t)'\r' - (uint8_t)'\t');
+        const size_t keep = (size_t)!(control_ws | (byte == (uint8_t)' '));
+        buf[o] = byte;
+        o += keep;
+    }
     return o;
 }
 
@@ -337,26 +359,26 @@ size_t lumina_transform_normalise_path(uint8_t *buf, size_t len, int win) {
  * replaceComments — <!-- ... --> -> nothing (single line).
  * --------------------------------------------------------------------------*/
 size_t lumina_transform_replace_comments(uint8_t *buf, size_t len) {
-    /* Szukamy zarowno '<' (HTML) jak i '/' (C/SQL) */
+    /* Both HTML and C/SQL comment forms are part of CRS semantics. */
     if (!memchr(buf, '<', len) && !memchr(buf, '/', len)) return len;
     size_t o = 0, i = 0;
     while (i < len) {
-        /* Komentarz HTML: <!-- ... --> */
+        /* HTML comment: <!-- ... --> */
         if (buf[i] == '<' && i + 3 < len && buf[i+1] == '!' && buf[i+2] == '-' && buf[i+3] == '-') {
             size_t j = i + 4;
             while (j + 2 < len && !(buf[j] == '-' && buf[j+1] == '-' && buf[j+2] == '>')) j++;
             if (j + 2 < len) { 
-                buf[o++] = ' '; /* Zastępujemy spacją! */
+                buf[o++] = ' ';
                 i = j + 3; 
                 continue; 
             }
         }
-        /* Komentarz C/SQL: */
+        /* C/SQL block-comment form. */
         else if (buf[i] == '/' && i + 1 < len && buf[i+1] == '*') {
             size_t j = i + 2;
             while (j + 1 < len && !(buf[j] == '*' && buf[j+1] == '/')) j++;
             if (j + 1 < len) { 
-                buf[o++] = ' '; /* Zastępujemy spacją! */
+                buf[o++] = ' ';
                 i = j + 2; 
                 continue; 
             }
@@ -483,7 +505,15 @@ size_t lumina_transform_remove_comments_char(uint8_t *buf, size_t len) {
     return j;
 }
 
-size_t lumina_transform_base64_decode(uint8_t *buf, size_t len) {
+static inline void lumina_transform_features_record(
+        LuminaTransformFeatures *features, uint8_t byte) {
+    if (features)
+        features->observed_bytes[byte >> 6] |=
+            UINT64_C(1) << (byte & 63);
+}
+
+static size_t lumina_transform_base64_decode_impl(
+        uint8_t *buf, size_t len, LuminaTransformFeatures *features) {
     static const int8_t b64t[256] = {
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -513,6 +543,11 @@ size_t lumina_transform_base64_decode(uint8_t *buf, size_t len) {
     }
     if (valid_chars == 0 || valid_chars % 4 == 1) return len;
 
+    if (features) {
+        for (size_t word = 0; word < 4; ++word)
+            features->observed_bytes[word] = 0;
+        features->known = 1;
+    }
     size_t out = 0;
     int state = 0;
     uint32_t val = 0;
@@ -524,20 +559,36 @@ size_t lumina_transform_base64_decode(uint8_t *buf, size_t len) {
         val = (val << 6) | (uint8_t)v;
         state++;
         if (state == 4) {
-            buf[out++] = (val >> 16) & 0xFF;
-            buf[out++] = (val >> 8) & 0xFF;
-            buf[out++] = val & 0xFF;
+            uint8_t byte0 = (uint8_t)((val >> 16) & 0xffu);
+            uint8_t byte1 = (uint8_t)((val >> 8) & 0xffu);
+            uint8_t byte2 = (uint8_t)(val & 0xffu);
+            buf[out++] = byte0;
+            buf[out++] = byte1;
+            buf[out++] = byte2;
+            lumina_transform_features_record(features, byte0);
+            lumina_transform_features_record(features, byte1);
+            lumina_transform_features_record(features, byte2);
             val = 0;
             state = 0;
         }
     }
     if (state == 3) {
-        buf[out++] = (val >> 10) & 0xFF;
-        buf[out++] = (val >> 2) & 0xFF;
+        uint8_t byte0 = (uint8_t)((val >> 10) & 0xffu);
+        uint8_t byte1 = (uint8_t)((val >> 2) & 0xffu);
+        buf[out++] = byte0;
+        buf[out++] = byte1;
+        lumina_transform_features_record(features, byte0);
+        lumina_transform_features_record(features, byte1);
     } else if (state == 2) {
-        buf[out++] = (val >> 4) & 0xFF;
+        uint8_t byte = (uint8_t)((val >> 4) & 0xffu);
+        buf[out++] = byte;
+        lumina_transform_features_record(features, byte);
     }
     return out;
+}
+
+size_t lumina_transform_base64_decode(uint8_t *buf, size_t len) {
+    return lumina_transform_base64_decode_impl(buf, len, NULL);
 }
 
 static inline int isodigit(int c) { return c >= '0' && c <= '7'; }
@@ -603,31 +654,369 @@ size_t lumina_transform_escape_seq_decode(uint8_t *buf, size_t len) {
     return j;
 }
 
-size_t lumina_apply_transforms(const LuminaTransformId *seq, uint8_t *buf, size_t len) {
-    size_t out = len;
-    for (int k = 0; seq[k] != LUMINA_T_NONE; k++) {
-        switch (seq[k]) {
-        case LUMINA_T_LOWERCASE:          lumina_transform_lower(buf, out); break;
-        case LUMINA_T_REMOVE_NULLS:       out = lumina_transform_remove_nulls(buf, out); break;
-        case LUMINA_T_URL_DECODE:         out = lumina_transform_url_decode(buf, out, 1); break;
-        case LUMINA_T_URL_DECODE_UNI:     out = lumina_transform_url_decode_uni(buf, out); break;
-        case LUMINA_T_HTML_ENTITY_DECODE: out = lumina_transform_html_entity_decode(buf, out); break;
-        case LUMINA_T_JS_DECODE:          out = lumina_transform_js_decode(buf, out); break;
-        case LUMINA_T_CSS_DECODE:         out = lumina_transform_css_decode(buf, out); break;
-        case LUMINA_T_COMPRESS_WS:        out = lumina_transform_compress_ws(buf, out); break;
-        case LUMINA_T_REMOVE_WS:          out = lumina_transform_remove_ws(buf, out); break;
-        case LUMINA_T_NORMALIZE_PATH:     out = lumina_transform_normalise_path(buf, out, 0); break;
-        case LUMINA_T_NORMALIZE_PATH_WIN: out = lumina_transform_normalise_path(buf, out, 1); break;
-        case LUMINA_T_REPLACE_COMMENTS:   out = lumina_transform_replace_comments(buf, out); break;
-        case LUMINA_T_UTF8_TO_UNICODE:    out = lumina_transform_utf8_to_unicode(buf, out); break;
-        case LUMINA_T_CMDLINE:            out = lumina_transform_cmdline(buf, out); break;
-        case LUMINA_T_ESCAPE_SEQ_DECODE:  out = lumina_transform_escape_seq_decode(buf, out); break;
-        case LUMINA_T_BASE64_DECODE:      out = lumina_transform_base64_decode(buf, out); break;
-        case LUMINA_T_LENGTH:             out = lumina_transform_length(buf, out); break;
-        case LUMINA_T_REMOVE_COMMENTS_CHAR: out = lumina_transform_remove_comments_char(buf, out); break;
-        default: break;
+static int lumina_contains_complete_comment(const uint8_t *buf, size_t len) {
+    for (size_t i = 0; i < len; ++i) {
+        if (i + 3 < len && buf[i] == '<' && buf[i + 1] == '!' &&
+            buf[i + 2] == '-' && buf[i + 3] == '-') {
+            for (size_t j = i + 4; j + 2 < len; ++j)
+                if (buf[j] == '-' && buf[j + 1] == '-' &&
+                    buf[j + 2] == '>')
+                    return 1;
+        }
+        if (i + 1 < len && buf[i] == '/' && buf[i + 1] == '*') {
+            for (size_t j = i + 2; j + 1 < len; ++j)
+                if (buf[j] == '*' && buf[j + 1] == '/')
+                    return 1;
         }
     }
+    return 0;
+}
+
+static int lumina_base64_may_decode(const uint8_t *buf, size_t len) {
+    size_t valid = 0;
+    for (size_t i = 0; i < len; ++i) {
+        uint8_t byte = buf[i];
+        if (byte == '=') break;
+        if (byte == '\n' || byte == '\r' || byte == ' ' || byte == '\t')
+            continue;
+        if ((byte >= 'A' && byte <= 'Z') ||
+            (byte >= 'a' && byte <= 'z') ||
+            (byte >= '0' && byte <= '9') || byte == '+' || byte == '/') {
+            ++valid;
+            continue;
+        }
+        return 0;
+    }
+    return valid != 0 && (valid & 3u) != 1u;
+}
+
+int lumina_transform_step_may_change(
+        LuminaTransformId transform, const uint8_t *buf, size_t len) {
+    if (!buf) return 0;
+    switch (transform) {
+    case LUMINA_T_LOWERCASE:
+        for (size_t i = 0; i < len; ++i)
+            if (buf[i] >= 'A' && buf[i] <= 'Z') return 1;
+        return 0;
+    case LUMINA_T_URL_DECODE:
+    case LUMINA_T_URL_DECODE_UNI:
+        for (size_t i = 0; i < len; ++i) {
+            if (buf[i] == '+') return 1;
+            if (buf[i] != '%' || i + 2 >= len) continue;
+            if (hexval(buf[i + 1]) >= 0 && hexval(buf[i + 2]) >= 0)
+                return 1;
+            if (transform == LUMINA_T_URL_DECODE_UNI &&
+                i + 5 < len && (buf[i + 1] == 'u' || buf[i + 1] == 'U') &&
+                hexval(buf[i + 2]) >= 0 && hexval(buf[i + 3]) >= 0 &&
+                hexval(buf[i + 4]) >= 0 && hexval(buf[i + 5]) >= 0)
+                return 1;
+        }
+        return 0;
+    case LUMINA_T_HTML_ENTITY_DECODE:
+        return memchr(buf, '&', len) != NULL;
+    case LUMINA_T_REMOVE_NULLS:
+        return memchr(buf, 0, len) != NULL;
+    case LUMINA_T_JS_DECODE:
+    case LUMINA_T_CSS_DECODE:
+    case LUMINA_T_ESCAPE_SEQ_DECODE:
+        return memchr(buf, '\\', len) != NULL;
+    case LUMINA_T_COMPRESS_WS:
+    case LUMINA_T_REMOVE_WS:
+        for (size_t i = 0; i < len; ++i)
+            if (buf[i] == ' ' || buf[i] == '\t' || buf[i] == '\r' ||
+                buf[i] == '\n' || buf[i] == '\f' || buf[i] == '\v')
+                return 1;
+        return 0;
+    case LUMINA_T_NORMALIZE_PATH:
+        return memchr(buf, '/', len) != NULL || memchr(buf, '.', len) != NULL;
+    case LUMINA_T_NORMALIZE_PATH_WIN:
+        return memchr(buf, '/', len) != NULL || memchr(buf, '.', len) != NULL ||
+               memchr(buf, '\\', len) != NULL;
+    case LUMINA_T_REPLACE_COMMENTS:
+        return lumina_contains_complete_comment(buf, len);
+    case LUMINA_T_UTF8_TO_UNICODE:
+        for (size_t i = 0; i < len; ++i)
+            if (buf[i] & 0x80u) return 1;
+        return 0;
+    case LUMINA_T_CMDLINE:
+        for (size_t i = 0; i < len; ++i) {
+            uint8_t byte = buf[i];
+            if ((byte >= 'A' && byte <= 'Z') ||
+                byte == '\\' || byte == '"' || byte == '\'' || byte == '^' ||
+                byte == ' ' || byte == '\t' || byte == '\r' || byte == '\n' ||
+                byte == '\v' || byte == '\f' || byte == ',' || byte == ';' ||
+                byte == '/' || byte == '(' || byte == ')' || byte == 0xa0)
+                return 1;
+        }
+        return 0;
+    case LUMINA_T_BASE64_DECODE:
+        return lumina_base64_may_decode(buf, len);
+    case LUMINA_T_LENGTH:
+        return 1;
+    case LUMINA_T_REMOVE_COMMENTS_CHAR:
+        for (size_t i = 0; i < len; ++i) {
+            if (buf[i] == '#') return 1;
+            if (i + 1 < len &&
+                ((buf[i] == '/' && buf[i + 1] == '*') ||
+                 (buf[i] == '*' && buf[i + 1] == '/') ||
+                 (buf[i] == '-' && buf[i + 1] == '-')))
+                return 1;
+            if (i + 3 < len && buf[i] == '<' && buf[i + 1] == '!' &&
+                buf[i + 2] == '-' && buf[i + 3] == '-')
+                return 1;
+        }
+        return 0;
+    default:
+        return 0;
+    }
+}
+
+size_t lumina_apply_transform_step(
+        LuminaTransformId transform, uint8_t *buf, size_t len) {
+#if defined(LUMINA_DATAPLANE_DIAGNOSTICS)
+    size_t output_len = len;
+    switch (transform) {
+    case LUMINA_T_LOWERCASE:
+        lumina_transform_lower(buf, len);
+        break;
+    case LUMINA_T_REMOVE_NULLS:
+        output_len = lumina_transform_remove_nulls(buf, len);
+        break;
+    case LUMINA_T_URL_DECODE:
+        output_len = lumina_transform_url_decode(buf, len, 1);
+        break;
+    case LUMINA_T_URL_DECODE_UNI:
+        output_len = lumina_transform_url_decode_uni(buf, len);
+        break;
+    case LUMINA_T_HTML_ENTITY_DECODE:
+        output_len = lumina_transform_html_entity_decode(buf, len);
+        break;
+    case LUMINA_T_JS_DECODE:
+        output_len = lumina_transform_js_decode(buf, len);
+        break;
+    case LUMINA_T_CSS_DECODE:
+        output_len = lumina_transform_css_decode(buf, len);
+        break;
+    case LUMINA_T_COMPRESS_WS:
+        output_len = lumina_transform_compress_ws(buf, len);
+        break;
+    case LUMINA_T_REMOVE_WS:
+        output_len = lumina_transform_remove_ws(buf, len);
+        break;
+    case LUMINA_T_NORMALIZE_PATH:
+        output_len = lumina_transform_normalise_path(buf, len, 0);
+        break;
+    case LUMINA_T_NORMALIZE_PATH_WIN:
+        output_len = lumina_transform_normalise_path(buf, len, 1);
+        break;
+    case LUMINA_T_REPLACE_COMMENTS:
+        output_len = lumina_transform_replace_comments(buf, len);
+        break;
+    case LUMINA_T_UTF8_TO_UNICODE:
+        output_len = lumina_transform_utf8_to_unicode(buf, len);
+        break;
+    case LUMINA_T_CMDLINE:
+        output_len = lumina_transform_cmdline(buf, len);
+        break;
+    case LUMINA_T_ESCAPE_SEQ_DECODE:
+        output_len = lumina_transform_escape_seq_decode(buf, len);
+        break;
+    case LUMINA_T_BASE64_DECODE:
+        output_len = lumina_transform_base64_decode(buf, len);
+        break;
+    case LUMINA_T_LENGTH:
+        output_len = lumina_transform_length(buf, len);
+        break;
+    case LUMINA_T_REMOVE_COMMENTS_CHAR:
+        output_len = lumina_transform_remove_comments_char(buf, len);
+        break;
+    default:
+        break;
+    }
+    LUMINA_RECORD_TRANSFORM_STEP(transform, len, output_len);
+    return output_len;
+#else
+    switch (transform) {
+    case LUMINA_T_LOWERCASE:          lumina_transform_lower(buf, len); return len;
+    case LUMINA_T_REMOVE_NULLS:       return lumina_transform_remove_nulls(buf, len);
+    case LUMINA_T_URL_DECODE:         return lumina_transform_url_decode(buf, len, 1);
+    case LUMINA_T_URL_DECODE_UNI:     return lumina_transform_url_decode_uni(buf, len);
+    case LUMINA_T_HTML_ENTITY_DECODE: return lumina_transform_html_entity_decode(buf, len);
+    case LUMINA_T_JS_DECODE:          return lumina_transform_js_decode(buf, len);
+    case LUMINA_T_CSS_DECODE:         return lumina_transform_css_decode(buf, len);
+    case LUMINA_T_COMPRESS_WS:        return lumina_transform_compress_ws(buf, len);
+    case LUMINA_T_REMOVE_WS:          return lumina_transform_remove_ws(buf, len);
+    case LUMINA_T_NORMALIZE_PATH:     return lumina_transform_normalise_path(buf, len, 0);
+    case LUMINA_T_NORMALIZE_PATH_WIN: return lumina_transform_normalise_path(buf, len, 1);
+    case LUMINA_T_REPLACE_COMMENTS:   return lumina_transform_replace_comments(buf, len);
+    case LUMINA_T_UTF8_TO_UNICODE:    return lumina_transform_utf8_to_unicode(buf, len);
+    case LUMINA_T_CMDLINE:            return lumina_transform_cmdline(buf, len);
+    case LUMINA_T_ESCAPE_SEQ_DECODE:  return lumina_transform_escape_seq_decode(buf, len);
+    case LUMINA_T_BASE64_DECODE:      return lumina_transform_base64_decode(buf, len);
+    case LUMINA_T_LENGTH:             return lumina_transform_length(buf, len);
+    case LUMINA_T_REMOVE_COMMENTS_CHAR:
+        return lumina_transform_remove_comments_char(buf, len);
+    default:
+        return len;
+    }
+#endif
+}
+
+void lumina_transform_features_init(
+        LuminaTransformFeatures *features,
+        const uint64_t observed_bytes[4]) {
+    if (!features || !observed_bytes) return;
+    for (size_t word = 0; word < 4; ++word)
+        features->observed_bytes[word] = observed_bytes[word];
+    features->known = 1;
+}
+
+static inline int lumina_transform_feature_has_byte(
+        const LuminaTransformFeatures *features, unsigned byte) {
+    return (features->observed_bytes[byte >> 6] >> (byte & 63)) & 1u;
+}
+
+int lumina_transform_features_may_change(
+        const LuminaTransformFeatures *features,
+        LuminaTransformId transform) {
+    if (!features || !features->known)
+        return transform != LUMINA_T_NONE;
+    const uint64_t *bytes = features->observed_bytes;
+    const uint64_t uppercase = UINT64_C(0x0000000007fffffe);
+    const uint64_t whitespace = UINT64_C(0x0000000100003e00);
+    switch (transform) {
+    case LUMINA_T_NONE:
+        return 0;
+    case LUMINA_T_LOWERCASE:
+        return (bytes[1] & uppercase) != 0;
+    case LUMINA_T_URL_DECODE:
+    case LUMINA_T_URL_DECODE_UNI:
+        return lumina_transform_feature_has_byte(features, '%') ||
+               lumina_transform_feature_has_byte(features, '+');
+    case LUMINA_T_HTML_ENTITY_DECODE:
+        return lumina_transform_feature_has_byte(features, '&');
+    case LUMINA_T_REMOVE_NULLS:
+        return (bytes[0] & UINT64_C(1)) != 0;
+    case LUMINA_T_JS_DECODE:
+    case LUMINA_T_CSS_DECODE:
+    case LUMINA_T_ESCAPE_SEQ_DECODE:
+        return lumina_transform_feature_has_byte(features, '\\');
+    case LUMINA_T_COMPRESS_WS:
+    case LUMINA_T_REMOVE_WS:
+        return (bytes[0] & whitespace) != 0;
+    case LUMINA_T_NORMALIZE_PATH:
+        return lumina_transform_feature_has_byte(features, '/') ||
+               lumina_transform_feature_has_byte(features, '.');
+    case LUMINA_T_NORMALIZE_PATH_WIN:
+        return lumina_transform_feature_has_byte(features, '/') ||
+               lumina_transform_feature_has_byte(features, '.') ||
+               lumina_transform_feature_has_byte(features, '\\');
+    case LUMINA_T_REPLACE_COMMENTS:
+        return lumina_transform_feature_has_byte(features, '<') ||
+               lumina_transform_feature_has_byte(features, '/');
+    case LUMINA_T_UTF8_TO_UNICODE:
+        return (bytes[2] | bytes[3]) != 0;
+    case LUMINA_T_CMDLINE:
+        return (bytes[1] & uppercase) != 0 ||
+               lumina_transform_feature_has_byte(features, '\\') ||
+               lumina_transform_feature_has_byte(features, '"') ||
+               lumina_transform_feature_has_byte(features, '\'') ||
+               lumina_transform_feature_has_byte(features, '^') ||
+               lumina_transform_feature_has_byte(features, ' ') ||
+               lumina_transform_feature_has_byte(features, '\t') ||
+               lumina_transform_feature_has_byte(features, '\r') ||
+               lumina_transform_feature_has_byte(features, '\n') ||
+               lumina_transform_feature_has_byte(features, '\v') ||
+               lumina_transform_feature_has_byte(features, '\f') ||
+               lumina_transform_feature_has_byte(features, ',') ||
+               lumina_transform_feature_has_byte(features, ';') ||
+               lumina_transform_feature_has_byte(features, '/') ||
+               lumina_transform_feature_has_byte(features, '(') ||
+               lumina_transform_feature_has_byte(features, ')') ||
+               lumina_transform_feature_has_byte(features, 0xa0u);
+    case LUMINA_T_REMOVE_COMMENTS_CHAR:
+        return lumina_transform_feature_has_byte(features, '/') ||
+               lumina_transform_feature_has_byte(features, '*') ||
+               lumina_transform_feature_has_byte(features, '<') ||
+               lumina_transform_feature_has_byte(features, '-') ||
+               lumina_transform_feature_has_byte(features, '#');
+    case LUMINA_T_BASE64_DECODE:
+    case LUMINA_T_LENGTH:
+        return 1;
+    default:
+        return 1;
+    }
+}
+
+static void lumina_transform_features_after_simple(
+        LuminaTransformFeatures *features,
+        LuminaTransformId transform) {
+    const uint64_t uppercase = UINT64_C(0x0000000007fffffe);
+    const uint64_t whitespace = UINT64_C(0x0000000100003e00);
+    switch (transform) {
+    case LUMINA_T_LOWERCASE: {
+        uint64_t present = features->observed_bytes[1] & uppercase;
+        features->observed_bytes[1] &= ~uppercase;
+        features->observed_bytes[1] |= present << 32;
+        return;
+    }
+    case LUMINA_T_REMOVE_NULLS:
+        features->observed_bytes[0] &= ~UINT64_C(1);
+        return;
+    case LUMINA_T_REMOVE_WS:
+        features->observed_bytes[0] &= ~whitespace;
+        return;
+    case LUMINA_T_COMPRESS_WS:
+        features->observed_bytes[0] &= ~whitespace;
+        features->observed_bytes[0] |= UINT64_C(1) << 32;
+        return;
+    case LUMINA_T_LENGTH:
+        for (size_t word = 0; word < 4; ++word)
+            features->observed_bytes[word] = 0;
+        features->observed_bytes[0] = UINT64_C(0x03ff) << '0';
+        return;
+    default:
+        return;
+    }
+}
+
+size_t lumina_apply_transform_step_features(
+        LuminaTransformId transform, uint8_t *buf, size_t len,
+        LuminaTransformFeatures *features) {
+    if (transform == LUMINA_T_BASE64_DECODE) {
+#if defined(LUMINA_DATAPLANE_DIAGNOSTICS)
+        size_t output_len =
+            lumina_transform_base64_decode_impl(buf, len, features);
+        LUMINA_RECORD_TRANSFORM_STEP(transform, len, output_len);
+        return output_len;
+#else
+        return lumina_transform_base64_decode_impl(buf, len, features);
+#endif
+    }
+
+    size_t out = lumina_apply_transform_step(transform, buf, len);
+    if (!features) return out;
+    switch (transform) {
+    case LUMINA_T_LOWERCASE:
+    case LUMINA_T_REMOVE_NULLS:
+    case LUMINA_T_REMOVE_WS:
+    case LUMINA_T_COMPRESS_WS:
+    case LUMINA_T_LENGTH:
+        lumina_transform_features_after_simple(features, transform);
+        break;
+    default:
+        /* Unknown is a sound upper bound: subsequent feasibility checks
+         * execute instead of risking a false-negative transform skip. */
+        features->known = 0;
+        break;
+    }
+    return out;
+}
+
+size_t lumina_apply_transforms(const LuminaTransformId *seq, uint8_t *buf, size_t len) {
+    size_t out = len;
+    for (int k = 0; seq[k] != LUMINA_T_NONE; k++)
+        out = lumina_apply_transform_step(seq[k], buf, out);
     return out;
 }
 

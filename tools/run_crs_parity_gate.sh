@@ -12,6 +12,7 @@ LIMIT="${LIMIT:-}"
 MIN_OVERALL="${MIN_OVERALL:-99.70}"
 SCOPE="${SCOPE:-inbound}"
 JSON_OUTPUT="${JSON_OUTPUT:-}"
+PL2_COVERAGE_OUTPUT="${PL2_COVERAGE_OUTPUT:-}"
 
 if [[ ! -f "$HARNESS" ]]; then
   echo "missing harness: $HARNESS" >&2
@@ -39,6 +40,9 @@ if [[ -n "$LIMIT" ]]; then
 fi
 if [[ -n "$JSON_OUTPUT" ]]; then
   cmd+=(--json-output "$JSON_OUTPUT")
+fi
+if [[ -n "$PL2_COVERAGE_OUTPUT" ]]; then
+  cmd+=(--coverage-output "$PL2_COVERAGE_OUTPUT")
 fi
 
 echo "commit=$(git -C "$ROOT" rev-parse --short HEAD)"

@@ -12,6 +12,12 @@ The production request path does not parse CRS rule files, load a regular-expres
 
 The current release line is `v0.4.x`.
 
+> [!IMPORTANT]
+> The `experimental/v0.4.2` branch prepares the `v0.4.2-ec.1` experimental candidate for bounded
+> request-body inspection. It has not completed a v0.4.2 canonical performance qualification.
+> Every canonical figure and evidence link below remains scoped exclusively to the exact
+> `v0.4.0-rc.11` source and workloads unless stated otherwise.
+
 > [!WARNING]
 > LuminaWAF is a systems-engineering research prototype and portfolio project.
 >
@@ -201,8 +207,8 @@ The production inspection path follows these rules:
 * No runtime parsing of CRS `.conf` files.
 * No dynamically loaded regular-expression engine.
 * No dynamically loaded SQL injection classifier.
-* No heap allocation inside the core `libluminawaf` inspection path; NGINX adapter allocations are
-  outside this core-library claim.
+* No heap allocation inside the core `libluminawaf` inspection path; bounded NGINX request-body
+  capture may use request-pool storage.
 * Caller-owned request bytes.
 * Bounded thread-local transformation storage.
 * Generated finite-state matchers and routing tables.
@@ -398,6 +404,7 @@ http {
 
         location / {
             lumina_waf on;
+            client_max_body_size 128k;
             root /srv/www;
         }
     }
@@ -405,6 +412,47 @@ http {
 ```
 
 Package `ngx_http_luminawaf_module.so` together with its matching `libluminawaf.so`.
+
+The v0.4.2 adapter reads request bodies asynchronously through NGINX's common request-body API,
+then inspects URI, query, headers and the complete body as one transaction. The initial release
+accepts at most `128 KiB` of inspected body data. Known and streamed over-limit requests fail
+closed with `413`; malformed structured bodies return `400`, security-forbidden structured
+constructs return `403`, unsupported representations return `415`, and internal capture or engine
+failures return `500`. None of these requests reaches the backend. Non-identity `Content-Encoding`
+values remain outside the v0.4.2 contract and are rejected because the engine must not inspect a
+different representation from the application.
+
+Small in-memory bodies are passed without a WAF-owned copy. Spill-prone known-length bodies use
+one exact capture, while unknown-length bodies use bounded request-pool slabs and at most one
+final coalesce. The module performs no synchronous request-body file reads. Allowed bodies remain
+byte-identical for downstream handlers.
+
+Structured projection is bounded and allocation-free inside `libluminawaf`:
+
+* JSON uses strict value grammar, UTF-8 validation, decoded object keys and string values, and
+  correct UTF-16 surrogate-pair composition for `\uXXXX` escapes.
+* XML accepts UTF-8, UTF-16LE and UTF-16BE. UTF-16 byte order is detected from a BOM or the XML
+  opening signature; code units, surrogate pairs and XML codepoints are validated by a streaming
+  cursor, and an encoding declaration must agree with the wire representation. The document is not
+  transcoded wholesale: only projected text and attribute values are encoded as UTF-8 for the
+  generated matchers. A bounded internal DTD profile accepts a document-root declaration with an
+  optional subset of up to `32` internal general text entities. Entity expansion is cycle checked
+  and budgeted; external subsets, `SYSTEM`, `PUBLIC` and parameter entities are rejected with `403`,
+  while declaration forms outside the profile are rejected with `415`. No filesystem or network
+  resolver exists.
+* Multipart validates framing and headers, supports quoted boundaries, `filename*`, nested
+  multipart up to the configured depth, and strict `base64` or `quoted-printable` transfer
+  decoding before inspection.
+
+Raw `REQUEST_BODY` inspection remains active alongside structured projection. The parsers are
+security projectors rather than general document object models: they expose typed values to the
+generated policy without allocating an application-visible syntax tree.
+
+HTTP/1.1 fixed-length and chunked requests and HTTP/2 requests with and without
+`Content-Length` are covered by integration tests, including concurrent streams on one HTTP/2
+connection. The adapter intentionally uses no HTTP/2, HTTP/3 or QUIC internal fields. This keeps
+the design compatible with NGINX's protocol-neutral body pipeline, but HTTP/3 remains unclaimed
+until it has protocol-level evidence on a pinned QUIC-capable build.
 
 Preserve the runtime library lookup path selected during the module build and validate the configuration before activation:
 
@@ -566,6 +614,9 @@ These are interesting experiments that are not allowed to block the main release
 - [ ] Add an API translation layer (SecLang -> C -> Atomic Flip, because even AOT needs to listen sometimes)
 - [ ] Find out how much of the remaining integration residual is NGINX being NGINX
 - [ ] Make the benchmark harness complain even more aggressively when I accidentally try to cheat
+- [ ] Add bounded request `Content-Encoding` decoding, starting with one `gzip` or `deflate`
+  coding and explicit decompressed-size, expansion-ratio and work limits; qualify Brotli and
+  stacked codings separately
 
 ---
 

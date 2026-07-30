@@ -19,8 +19,11 @@ Metrics: positive_block_rate, positive_exact_rate, negative_excluded_rate, verdi
 Usage:
   python3 crs_parity_harness.py [--dir <regression tests dir>] [--limit N]
 """
-import os, sys, glob, argparse, base64, ctypes, signal, time, json
+import os, sys, glob, argparse, ctypes, signal, time, json, subprocess
 from pathlib import Path
+
+from ftw_input import body_bytes, normalize_encoded_input, request_body_class
+from pl2_coverage_oracle import CoverageTracker, sha256_file, sha256_tree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -28,6 +31,7 @@ SO = os.environ.get("LUMINA_WAF_SO", os.path.join(ROOT, "build", "libluminawaf.s
 DEFAULT_DIR = os.path.join(ROOT, "tests/eval_suite/coreruleset/tests/regression/tests")
 DEFAULT_RULES_DIR = os.path.join(ROOT, "tests/eval_suite/coreruleset/rules")
 DEFAULT_SETUP_CONF = None
+LUMINA_BUNDLE_MAX_VARS = 32
 
 
 def materialize_default_setup_conf():
@@ -50,7 +54,7 @@ class BundleVar(ctypes.Structure):
                 ("header_mask", ctypes.c_uint32), ("collection_mask", ctypes.c_uint64),
                 ("name", ctypes.POINTER(ctypes.c_ubyte)), ("name_len", ctypes.c_size_t)]
 class LuminaBundle(ctypes.Structure):
-    _fields_ = [("vars", BundleVar * 16), ("count", ctypes.c_int), ("hdr_presence_mask", ctypes.c_uint32),
+    _fields_ = [("vars", BundleVar * LUMINA_BUNDLE_MAX_VARS), ("count", ctypes.c_int), ("hdr_presence_mask", ctypes.c_uint32),
                 # C4 STRUCTURAL discrete CRS collections (mirror luminawaf.h LuminaBundle)
                 ("req_method", ctypes.POINTER(ctypes.c_ubyte)), ("req_method_len", ctypes.c_size_t),
                 ("req_line", ctypes.POINTER(ctypes.c_ubyte)), ("req_line_len", ctypes.c_size_t),
@@ -122,48 +126,7 @@ def _decode_request_path(path):
     return bytes(out)
 
 def normalize_input(inp):
-    raw = inp.get("encoded_request")
-    if not raw:
-        return inp
-    try:
-        req = base64.b64decode(raw).decode("iso-8859-1", "replace")
-    except Exception:
-        return inp
-    head, sep, body = req.partition("\r\n\r\n")
-    if not sep:
-        head, _, body = req.partition("\n\n")
-    lines = head.replace("\r\n", "\n").split("\n")
-    if not lines or not lines[0].strip():
-        return inp
-    parts = lines[0].split()
-    if len(parts) < 3:
-        return inp
-    out = dict(inp)
-    out["method"], out["uri"], out["version"] = parts[0], parts[1], parts[2]
-    headers = dict(out.get("headers") or {})
-    header_counts = {name.lower(): 1 for name in headers}
-    for line in lines[1:]:
-        if not line or ":" not in line:
-            continue
-        name, val = line.split(":", 1)
-        name = name.strip()
-        val = val.strip()
-        if not name:
-            continue
-        # The offline comparator models the Apache/ModSecurity FTW contract:
-        # duplicate request headers are exposed as one comma-joined collection
-        # member. NGINX integrations can still feed distinct values directly.
-        header_counts[name.lower()] = 1
-        headers[name] = f"{headers[name]}, {val}" if name in headers else val
-    out["headers"] = headers
-    out["_header_counts"] = header_counts
-    # encoded_request already contains the complete wire request. Applying
-    # client-side autocompletion again would synthesize headers not seen by
-    # ModSecurity.
-    out["autocomplete_headers"] = False
-    if body:
-        out["data"] = body
-    return out
+    return normalize_encoded_input(inp)
 
 def build_bundle(inp):
     del _keep[:]
@@ -189,14 +152,14 @@ def build_bundle(inp):
         headers["Content-Type"] = "application/x-www-form-urlencoded"
         header_counts["content-type"] = 1
 
-    if transfer_encoding_key is not None:
+    if (transfer_encoding_key is not None and
+            not inp.get("_preserve_conflicting_framing", False)):
         if content_length_key is not None:
             headers.pop(content_length_key)
         header_counts.pop("content-length", None)
     elif (inp.get("autocomplete_headers", True) and content_length_key is None and
           (data is not None or method.upper() in {"POST", "PUT", "PATCH"})):
-        body = "" if data is None else str(data)
-        headers["Content-Length"] = str(len(body.encode("utf-8", "replace")))
+        headers["Content-Length"] = str(len(body_bytes(data)))
         header_counts["content-length"] = 1
 
     if (data is not None and not inp.get("autocomplete_headers", True) and
@@ -245,8 +208,11 @@ def build_bundle(inp):
         collection_mask = (1 << 4) | ((1 << 6) if is_json else 0)
         d, dl = _buf(data)
         vars_.append((d, dl, VT_BODY, scope, 0, collection_mask, None, 0))
-    if len(vars_) > 16:
-        vars_ = vars_[:16]
+    if len(vars_) > LUMINA_BUNDLE_MAX_VARS:
+        raise ValueError(
+            f"request requires {len(vars_)} bundle variables; "
+            f"capacity is {LUMINA_BUNDLE_MAX_VARS}"
+        )
     b = LuminaBundle()
     b.count = len(vars_)
     for i, (p, pl, vt, sc, hm, cm, name_ptr, name_len) in enumerate(vars_):
@@ -324,6 +290,83 @@ def scan(inp, audit_ids):
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old)
+
+def scan_direct(inp, expected_rule_id):
+    """Run one production inspection without audit re-evaluation."""
+    bundle = build_bundle(inp)
+    result = LuminaResult()
+    state = ctypes.create_string_buffer(RULE_STATE_SIZE)
+    status = lib.luminawaf_inspect_bundle(
+        ctypes.byref(bundle), state, ctypes.byref(result)
+    )
+    exact = bool(lib.luminawaf_rule_state_matched(state, expected_rule_id))
+    return status, result.threat_level, exact
+
+def supplemental_direct_cases():
+    multipart_body = (
+        b"--lumina-boundary\r\n"
+        b"Bad\tName: value\r\n\r\n"
+        b"clean value\r\n"
+        b"--lumina-boundary--\r\n"
+    )
+    common_headers = {"Host": "localhost", "User-Agent": "lumina-coverage"}
+    return [
+        (
+            "invalid-content-length",
+            920160,
+            {
+                "uri": "/",
+                "headers": {**common_headers, "Content-Length": "12x"},
+                "autocomplete_headers": False,
+            },
+        ),
+        (
+            "conflicting-content-length-transfer-encoding",
+            920181,
+            {
+                "uri": "/",
+                "headers": {
+                    **common_headers,
+                    "Content-Length": "12",
+                    "Transfer-Encoding": "chunked",
+                },
+                "autocomplete_headers": False,
+                "_preserve_conflicting_framing": True,
+            },
+        ),
+        (
+            "raw-uri-fragment",
+            920610,
+            {"uri": "/path#fragment", "headers": common_headers},
+        ),
+        (
+            "duplicate-content-type-count",
+            920620,
+            {
+                "uri": "/",
+                "headers": {**common_headers, "Content-Type": "text/plain"},
+                "_header_counts": {
+                    "host": 1,
+                    "user-agent": 1,
+                    "content-type": 2,
+                },
+            },
+        ),
+        (
+            "multipart-invalid-part-header-name",
+            922130,
+            {
+                "method": "POST",
+                "uri": "/upload",
+                "headers": {
+                    **common_headers,
+                    "Content-Type":
+                        "multipart/form-data; boundary=lumina-boundary",
+                },
+                "data": multipart_body,
+            },
+        ),
+    ]
 
 def rid_of(doc):
     m = doc.get("meta", {}) or {}
@@ -423,6 +466,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--report-limit", type=int, default=2000)
     ap.add_argument("--json-output")
+    ap.add_argument("--coverage-output")
     args = ap.parse_args()
     if args.setup_conf is None:
         args.setup_conf = materialize_default_setup_conf()
@@ -431,6 +475,14 @@ def main():
     files = filter_files_for_scope(files, args.dir, args.scope)
     rule_paranoia = load_rule_paranoia(args.rules_dir)
     config_inactive_ids = load_config_inactive_rule_ids(args.rules_dir, args.setup_conf)
+    tools_dir = os.path.join(ROOT, "tools")
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    from audit_crs_mechanisms import audit_rules
+    coverage_tracker = CoverageTracker(
+        audit_rules(Path(args.rules_dir), args.pl, Path(ROOT) / "src"),
+        config_inactive_rule_ids=config_inactive_ids,
+    )
 
     C = dict(pos=0, pos_block=0, pos_exact=0, neg=0, neg_ok=0, verdict=0, verdict_ok=0,
              transport_skip=0, pl_skip=0, config_skip=0, timeout=0, err=0)
@@ -446,7 +498,7 @@ def main():
             continue
         rid = rid_of(doc)
         for t in doc["tests"]:
-            for stage in t.get("stages", []):
+            for stage_index, stage in enumerate(t.get("stages", [])):
                 inp = stage.get("input", {})
                 out = stage.get("output", {}) or {}
                 log = out.get("log", {}) or {}
@@ -478,10 +530,24 @@ def main():
                 if status is not None and str(status) == "400":
                     C["transport_skip"] += 1
                     continue
+                normalized_inp = normalize_input(inp)
+                body_class = request_body_class(normalized_inp)
+                test_ref = (
+                    f"{os.path.relpath(f, args.dir)}::"
+                    f"{t.get('test_id')}::{stage_index}"
+                )
+                if expect:
+                    coverage_tracker.observe_reference_positive(
+                        test_ref, _id_set(expect), body_class
+                    )
+                elif no_expect:
+                    coverage_tracker.observe_negative(
+                        test_ref, _id_set(no_expect), ()
+                    )
                 count += 1
                 try:
                     audit_ids = _id_set(expect) | _id_set(no_expect)
-                    matched, state, to = scan(inp, audit_ids)
+                    matched, state, to = scan(normalized_inp, audit_ids)
                 except Exception as e:
                     C["err"] += 1
                     failures.append((rid, t.get("test_id"), repr(e), inp.get("uri"), 0, "exception", f))
@@ -493,6 +559,14 @@ def main():
                 blocked = (matched != 0)
                 if expect:
                     expect_set = _id_set(expect)
+                    exact_ids = {
+                        rule_id
+                        for rule_id in expect_set
+                        if lib.luminawaf_rule_state_matched(state, rule_id)
+                    }
+                    coverage_tracker.observe_lumina_exact(
+                        test_ref, exact_ids, body_class
+                    )
                     C["pos"] += 1
                     if blocked:
                         C["pos_block"] += 1
@@ -509,9 +583,14 @@ def main():
                 elif no_expect:
                     no_expect_set = _id_set(no_expect)
                     C["neg"] += 1
-                    excluded_fired = any(
-                        lib.luminawaf_rule_state_matched(state, rule_id)
+                    fired_ids = {
+                        rule_id
                         for rule_id in no_expect_set
+                        if lib.luminawaf_rule_state_matched(state, rule_id)
+                    }
+                    excluded_fired = bool(fired_ids)
+                    coverage_tracker.observe_negative(
+                        test_ref, no_expect_set, no_expect_set - fired_ids
                     )
                     if not excluded_fired:
                         C["neg_ok"] += 1
@@ -529,12 +608,104 @@ def main():
         if args.limit and count >= args.limit:
             break
 
+    supplemental_results = []
+    if not args.limit:
+        for name, rule_id, request in supplemental_direct_cases():
+            try:
+                status, threat, exact = scan_direct(request, rule_id)
+            except Exception as error:
+                status, threat, exact = -1, 0, False
+                supplemental_results.append(
+                    {
+                        "name": name,
+                        "rule_id": rule_id,
+                        "status": status,
+                        "threat": threat,
+                        "exact": exact,
+                        "exception": repr(error),
+                    }
+                )
+            else:
+                supplemental_results.append(
+                    {
+                        "name": name,
+                        "rule_id": rule_id,
+                        "status": status,
+                        "threat": threat,
+                        "exact": exact,
+                    }
+                )
+            coverage_tracker.observe_supplemental_direct(
+                f"supplemental::{name}", rule_id, exact
+            )
+
     pos_rate = 100.0*C["pos_block"]/C["pos"] if C["pos"] else 0
     pos_exact_rate = 100.0*C["pos_exact"]/C["pos"] if C["pos"] else 0
     neg_rate = 100.0*C["neg_ok"]/C["neg"] if C["neg"] else 0
     verdict_rate = 100.0*C["verdict_ok"]/C["verdict"] if C["verdict"] else 0
     scored = C["pos"] + C["neg"] + C["verdict"]
     overall = 100.0*(C["pos_exact"]+C["neg_ok"]+C["verdict_ok"])/scored if scored else 0
+    generated_manifest = Path(ROOT) / "src/generated/rule_manifest.json"
+    library_path = Path(SO)
+    setup_path = Path(args.setup_conf) if args.setup_conf else None
+    corpus_root = Path(args.dir)
+    rules_root = Path(args.rules_dir)
+    try:
+        crs_commit = subprocess.check_output(
+            ["git", "-C", str(rules_root.parent), "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        crs_commit = "unavailable"
+    coverage_report = coverage_tracker.report(
+        {
+            "scope": args.scope,
+            "target_pl": args.pl,
+            "complete_test_corpus": not bool(args.limit),
+            "test_limit": args.limit or None,
+            "evaluated_tests": count,
+            "test_file_count": len(files),
+            "test_corpus_sha256": sha256_tree(
+                (Path(path) for path in files), corpus_root
+            ),
+            "rules_sha256": sha256_tree(
+                (
+                    path
+                    for path in rules_root.rglob("*")
+                    if path.is_file() and path.suffix in {".conf", ".data"}
+                ),
+                rules_root,
+            ),
+            "crs_commit": crs_commit,
+            "generated_manifest_sha256": (
+                sha256_file(generated_manifest)
+                if generated_manifest.is_file()
+                else "unavailable"
+            ),
+            "lumina_library_sha256": (
+                sha256_file(library_path)
+                if library_path.is_file()
+                else "unavailable"
+            ),
+            "setup_config_sha256": (
+                sha256_file(setup_path)
+                if setup_path is not None and setup_path.is_file()
+                else "unavailable"
+            ),
+        }
+    )
+    reference_coverage = coverage_report["coverage"]["reference_positive"]
+    active_reference_coverage = coverage_report["coverage"][
+        "config_resolved_reference_positive"
+    ]
+    implementation_coverage = coverage_report["coverage"]["lumina_exact_rule"]
+    supplemental_coverage = coverage_report["coverage"][
+        "supplemental_direct_exact"
+    ]
+    combined_internal_coverage = coverage_report["coverage"][
+        "combined_internal_active_implementation"
+    ]
     print(f"elapsed: {time.time()-t0:.1f}s  tests={count}")
     print(f"scope={args.scope} files={len(files)}")
     print(f"positive(block) : {pos_rate:.2f}%  ({C['pos_block']}/{C['pos']})")
@@ -546,6 +717,34 @@ def main():
     print(f"config_skipped={C['config_skip']}")
     print(f"timeouts={C['timeout']} exceptions={C['err']}")
     print(f"OVERALL PARITY  : {overall:.2f}%")
+    print(
+        "PL2 REFERENCE RULE COVERAGE: "
+        f"{reference_coverage['percent']:.2f}% "
+        f"({reference_coverage['matched']}/{reference_coverage['total']})"
+    )
+    print(
+        "PL2 CONFIG-RESOLVED RULE COVERAGE: "
+        f"{active_reference_coverage['percent']:.2f}% "
+        f"({active_reference_coverage['matched']}/"
+        f"{active_reference_coverage['total']})"
+    )
+    print(
+        "LUMINA EXACT RULE COVERAGE: "
+        f"{implementation_coverage['percent']:.2f}% "
+        f"({implementation_coverage['matched']}/{implementation_coverage['total']})"
+    )
+    print(
+        "SUPPLEMENTAL DIRECT EXACT COVERAGE: "
+        f"{supplemental_coverage['percent']:.2f}% "
+        f"({supplemental_coverage['matched']}/{supplemental_coverage['total']})"
+    )
+    print(
+        "COMBINED INTERNAL ACTIVE IMPLEMENTATION COVERAGE: "
+        f"{combined_internal_coverage['percent']:.2f}% "
+        f"({combined_internal_coverage['matched']}/"
+        f"{combined_internal_coverage['total']})"
+    )
+    print("PL2 COVERAGE REFERENCE: internal FTW expectations; ModSecurity runtime verified=false")
     from collections import Counter
     fc = Counter(f[0] for f in failures)
     kc = Counter(f[5] for f in failures)
@@ -584,6 +783,8 @@ def main():
             "exceptions": C["err"],
             "failure_count": len(failures),
             "failure_kinds": dict(kc),
+            "pl2_rule_coverage": coverage_report,
+            "supplemental_direct_results": supplemental_results,
             "failures": [
                 {
                     "rule_id": r, "test_id": tid, "description": desc, "uri": uri,
@@ -597,11 +798,24 @@ def main():
         with open(output, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2, sort_keys=True, default=str)
             fh.write("\n")
+    if args.coverage_output:
+        output = os.path.abspath(args.coverage_output)
+        os.makedirs(os.path.dirname(output), exist_ok=True)
+        with open(output, "w", encoding="utf-8") as fh:
+            json.dump(coverage_report, fh, indent=2, sort_keys=True, default=str)
+            fh.write("\n")
     with open(os.path.join(HERE, "crs_parity_report.txt"), "w") as fh:
         fh.write(f"OVERALL PARITY: {overall:.2f}%\nscope={args.scope} files={len(files)}\n"
                  f"pos_block={pos_rate:.2f} pos_exact={pos_exact_rate:.2f} "
                  f"neg={neg_rate:.2f} verdict={verdict_rate:.2f}\n")
         fh.write(f"transport_skipped={C['transport_skip']} pl_skipped={C['pl_skip']} target_pl={args.pl} timeouts={C['timeout']} exceptions={C['err']}\n")
+        fh.write(
+            f"pl2_reference_rule_coverage={reference_coverage['percent']:.2f} "
+            f"({reference_coverage['matched']}/{reference_coverage['total']}) "
+            f"lumina_exact_rule_coverage={implementation_coverage['percent']:.2f} "
+            f"({implementation_coverage['matched']}/{implementation_coverage['total']}) "
+            "modsecurity_runtime_verified=false\n"
+        )
         for r, tid, desc, uri, matched, kind, path in failures[:args.report_limit]:
             fh.write(f"rule={r} test={tid} kind={kind} matched={matched} uri={uri!r} file={path!r} desc={desc!r}\n")
 

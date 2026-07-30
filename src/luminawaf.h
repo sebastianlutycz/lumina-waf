@@ -91,6 +91,14 @@ typedef enum {
     LUMINA_HDR_RANGE           = (1u << 11),
 } LuminaHeaderMask;
 
+typedef enum {
+    LUMINA_ERROR_NONE = 0,
+    LUMINA_ERROR_REQBODY_MALFORMED = 1,
+    LUMINA_ERROR_REQBODY_UNSUPPORTED = 2,
+    LUMINA_ERROR_REQBODY_LIMIT = 3,
+    LUMINA_ERROR_REQBODY_FORBIDDEN = 4
+} LuminaError;
+
 /* Fixed-layout result returned through the public C ABI. */
 typedef struct {
     int error_flag;
@@ -117,7 +125,76 @@ typedef struct {
     size_t name_len;
 } BundleVar;
 
-#define LUMINA_BUNDLE_MAX_VARS 16
+#define LUMINA_BUNDLE_MAX_VARS 32
+#define LUMINA_MAX_INSPECTED_VALUE (128u * 1024u)
+
+#if defined(LUMINA_DATAPLANE_DIAGNOSTICS)
+/* Test-only work counters. Release builds do not expose this type or ABI. */
+#define LUMINA_DATAPLANE_RULE_COUNTER_SLOTS 256
+#define LUMINA_DATAPLANE_TRANSFORM_COUNTER_SLOTS 18
+typedef struct {
+    uint64_t value_scans;
+    uint64_t value_bytes;
+    uint64_t raw_request_body_scans;
+    uint64_t raw_request_body_bytes;
+    uint64_t offset_positions;
+    uint64_t candidate_rules;
+    uint64_t exact_dispatches;
+    uint64_t shared_router_calls;
+    uint64_t exhausted_candidate_masks;
+    uint64_t exhausted_posN_masks;
+    uint64_t raw_request_body_candidate_rules;
+    uint64_t raw_request_body_exact_dispatches;
+    uint64_t raw_request_body_exhausted_masks;
+    uint64_t raw_request_body_exhausted_posN_masks;
+    uint64_t json_zero_copy_values;
+    uint64_t json_zero_copy_bytes;
+    uint64_t json_materialized_values;
+    uint64_t json_materialized_bytes;
+    uint64_t exact_verifier_calls;
+    uint64_t exact_verifier_subject_bytes;
+    uint64_t exact_verifier_subjects_ge_4k;
+    uint64_t exact_verifier_bytes_ge_4k;
+    uint64_t exact_verifier_subjects_ge_64k;
+    uint64_t exact_verifier_bytes_ge_64k;
+    uint64_t exact_verifier_max_subject_bytes;
+    uint64_t raw_exact_verifier_calls;
+    uint64_t raw_exact_verifier_subject_bytes;
+    uint64_t transformed_exact_verifier_calls;
+    uint64_t transformed_exact_verifier_subject_bytes;
+    uint64_t transform_steps;
+    uint64_t transform_input_bytes;
+    uint64_t transform_output_bytes;
+    uint64_t transform_copies;
+    uint64_t transform_copy_bytes;
+    uint64_t transform_views;
+    uint64_t transform_view_input_bytes;
+    uint64_t transform_view_output_bytes;
+    uint64_t transform_cache_hits;
+    uint64_t transform_cache_hit_bytes;
+    uint64_t rule_dispatches[LUMINA_DATAPLANE_RULE_COUNTER_SLOTS];
+    uint64_t rule_exact_verifier_calls[LUMINA_DATAPLANE_RULE_COUNTER_SLOTS];
+    uint64_t rule_exact_verifier_subject_bytes[
+        LUMINA_DATAPLANE_RULE_COUNTER_SLOTS];
+    uint64_t transform_step_calls[
+        LUMINA_DATAPLANE_TRANSFORM_COUNTER_SLOTS];
+    uint64_t transform_step_input_bytes[
+        LUMINA_DATAPLANE_TRANSFORM_COUNTER_SLOTS];
+    uint64_t transform_step_output_bytes[
+        LUMINA_DATAPLANE_TRANSFORM_COUNTER_SLOTS];
+} LuminaDataplaneCounters;
+
+void luminawaf_dataplane_counters_reset(void);
+int luminawaf_dataplane_counters_get(LuminaDataplaneCounters *out);
+void luminawaf_dataplane_record_exact_verifier(
+    unsigned rule_idx, size_t subject_bytes, int transformed);
+void luminawaf_dataplane_record_transform_step(
+    uint32_t transform, size_t input_bytes, size_t output_bytes);
+void luminawaf_dataplane_record_transform_copy(size_t bytes);
+void luminawaf_dataplane_record_transform_view(
+    size_t input_bytes, size_t output_bytes);
+void luminawaf_dataplane_record_transform_cache_hit(size_t bytes);
+#endif
 
 typedef struct {
     BundleVar vars[LUMINA_BUNDLE_MAX_VARS];
@@ -162,6 +239,10 @@ typedef struct {
 #define LUMINA_FLAG_HAS_MULTIPART_XML (1ULL << 0)
 #define LUMINA_FLAG_PAYLOAD_TRUNCATED (1ULL << 1)
 #define LUMINA_FLAG_BASE64_STRICT_FAILED (1ULL << 2)
+#define LUMINA_FLAG_REQBODY_MALFORMED (1ULL << 3)
+#define LUMINA_FLAG_REQBODY_UNSUPPORTED (1ULL << 4)
+#define LUMINA_FLAG_REQBODY_LIMIT (1ULL << 5)
+#define LUMINA_FLAG_REQBODY_FORBIDDEN (1ULL << 6)
 
 typedef struct {
     LuminaHitSlab completed_rules;

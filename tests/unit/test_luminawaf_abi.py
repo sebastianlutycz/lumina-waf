@@ -9,6 +9,7 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+LUMINA_BUNDLE_MAX_VARS = 32
 
 
 class BundleVar(ctypes.Structure):
@@ -26,7 +27,7 @@ class BundleVar(ctypes.Structure):
 
 class LuminaBundle(ctypes.Structure):
     _fields_ = [
-        ("vars", BundleVar * 16),
+        ("vars", BundleVar * LUMINA_BUNDLE_MAX_VARS),
         ("count", ctypes.c_int),
         ("hdr_presence_mask", ctypes.c_uint32),
         ("req_method", ctypes.POINTER(ctypes.c_ubyte)),
@@ -105,7 +106,8 @@ int main(void) {
 #include "src/luminawaf.h"
 
 int main(void) {
-    printf("%zu %zu %zu %zu %zu %zu %zu %zu\n",
+    printf("%u %zu %zu %zu %zu %zu %zu %zu %zu\n",
+           LUMINA_BUNDLE_MAX_VARS,
            sizeof(LuminaBundle),
            offsetof(LuminaBundle, count),
            offsetof(LuminaBundle, req_method),
@@ -132,6 +134,7 @@ int main(void) {
                 [str(binary_path)], text=True).split()]
 
         ctypes_layout = [
+            LUMINA_BUNDLE_MAX_VARS,
             ctypes.sizeof(LuminaBundle),
             LuminaBundle.count.offset,
             LuminaBundle.req_method.offset,

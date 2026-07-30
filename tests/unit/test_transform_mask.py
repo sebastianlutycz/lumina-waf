@@ -34,6 +34,53 @@ class TransformMaskTest(unittest.TestCase):
         self.assertIn("lowercase SIMD boundaries: PASS", result.stdout)
         self.assertIn("OVERALL: PASS", result.stdout)
 
+    def test_transform_step_identity_proofs_match_operator_preconditions(self):
+        driver = r'''
+        #include <stdint.h>
+        #include <string.h>
+        #include "lumina_transforms.h"
+
+        static int changes(LuminaTransformId transform, const char *value) {
+            return lumina_transform_step_may_change(
+                transform, (const uint8_t *)value, strlen(value));
+        }
+
+        int main(void) {
+            if (changes(LUMINA_T_URL_DECODE_UNI, "plain-value")) return 1;
+            if (!changes(LUMINA_T_URL_DECODE_UNI, "a%2fb")) return 2;
+            if (!changes(LUMINA_T_URL_DECODE_UNI, "a+b")) return 3;
+            if (changes(LUMINA_T_JS_DECODE, "plain-value")) return 4;
+            if (!changes(LUMINA_T_JS_DECODE, "a\\x41")) return 5;
+            if (changes(LUMINA_T_REMOVE_WS, "plain-value")) return 6;
+            if (!changes(LUMINA_T_REMOVE_WS, "plain value")) return 7;
+            if (changes(LUMINA_T_REPLACE_COMMENTS, "slash/only")) return 8;
+            if (changes(LUMINA_T_REPLACE_COMMENTS, "/*unterminated")) return 9;
+            if (!changes(
+                    LUMINA_T_REPLACE_COMMENTS, "a/*comment*/b")) return 10;
+            if (changes(LUMINA_T_BASE64_DECODE, "plain-value")) return 11;
+            if (!changes(LUMINA_T_BASE64_DECODE, "QUJDRA==")) return 12;
+            if (changes(
+                    LUMINA_T_REMOVE_COMMENTS_CHAR, "slash/only")) return 13;
+            if (!changes(
+                    LUMINA_T_REMOVE_COMMENTS_CHAR, "a--b")) return 14;
+            return 0;
+        }
+        '''
+        with tempfile.TemporaryDirectory() as tmp:
+            src = pathlib.Path(tmp) / "transform_identity.c"
+            exe = pathlib.Path(tmp) / "transform_identity"
+            src.write_text(driver, encoding="utf-8")
+            subprocess.run(
+                [
+                    "cc", "-std=c11", "-O2", "-mavx2",
+                    "-I", str(ROOT / "src"),
+                    str(src), str(ROOT / "src" / "lumina_transforms.c"),
+                    "-o", str(exe),
+                ],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run([str(exe)], check=True)
+
     def test_actions_ignore_comments_and_do_not_inherit_previous_rule(self):
         conf = textwrap.dedent(
             r'''

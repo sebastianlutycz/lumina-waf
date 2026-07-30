@@ -43,31 +43,45 @@ static size_t html_entity_decode_pass(const unsigned char* in, size_t len, unsig
         if (i < len && in[i] == '#') {
             i++;
             unsigned int codepoint = 0;
-            int digits = 0;
+            size_t digits = 0;
             int is_hex = 0;
+            int overflow = 0;
             if (i < len && (in[i] == 'x' || in[i] == 'X')) {
                 is_hex = 1;
                 i++;
             }
             if (is_hex) {
-                while (i < len && digits < 8) {
+                while (i < len) {
                     int hv = hex_to_int((char)in[i]);
                     if (hv < 0) break;
-                    codepoint = (codepoint << 4) | (unsigned int)hv;
+                    if (!overflow) {
+                        if (codepoint > (0x10ffffu - (unsigned int)hv) / 16u) {
+                            overflow = 1;
+                        } else {
+                            codepoint = codepoint * 16u + (unsigned int)hv;
+                        }
+                    }
                     i++; digits++;
                 }
             } else {
-                while (i < len && in[i] >= '0' && in[i] <= '9' && digits < 8) {
-                    codepoint = codepoint * 10 + (in[i] - '0');
+                while (i < len && in[i] >= '0' && in[i] <= '9') {
+                    unsigned int digit = (unsigned int)(in[i] - '0');
+                    if (!overflow) {
+                        if (codepoint > (0x10ffffu - digit) / 10u) {
+                            overflow = 1;
+                        } else {
+                            codepoint = codepoint * 10u + digit;
+                        }
+                    }
                     i++; digits++;
                 }
             }
             if (digits > 0) {
                 if (i < len && in[i] == ';') i++;  /* consume optional ';' */
                 /* Emit as single ASCII if in range, otherwise as space */
-                if (codepoint > 0 && codepoint < 128) {
+                if (!overflow && codepoint > 0 && codepoint < 128) {
                     out[o++] = (unsigned char)codepoint;
-                } else if (codepoint == 0) {
+                } else if (!overflow && codepoint == 0) {
                     /* null — skip */
                 } else {
                     /* Non-ASCII codepoint: emit space to preserve token boundaries */

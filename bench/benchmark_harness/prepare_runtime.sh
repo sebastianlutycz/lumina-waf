@@ -41,6 +41,13 @@ need_exec "$PREFIX/bin/go-ftw"
 need_exec "$PREFIX/bin/wrk"
 need_exec "$PREFIX/bin/wrk2"
 need_file "$CACHE/dependency_provenance.json"
+jq -e '
+    .pcre2_jit == true and
+    (.pcre2_sljit_commit | type == "string" and length == 40)
+' "$CACHE/dependency_provenance.json" >/dev/null || {
+    echo "Benchmark Harness v1 cache lacks the required PCRE2 JIT provenance" >&2
+    exit 2
+}
 need_file "$naxsi_source/naxsi_rules/naxsi_core.rules"
 
 if [[ $MODE == --check-cache ]]; then
