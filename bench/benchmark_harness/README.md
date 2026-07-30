@@ -4,7 +4,7 @@ LuminaWAF Benchmark Harness v1 implements the normative V1.0 Protocol for Lumina
 equivalent outcomes and equivalent request inputs, while preserving the natural
 deployment cost of each engine.
 
-## ABB
+## Architecture
 
 - **Manifest gate:** freezes the real OWASP CRS tree, ordered includes, PL2
   policy, generated Lumina inventory and workload before measurement, then
@@ -51,6 +51,13 @@ The parent repository contains only the CRS Git submodule pointer, never CRS rul
 generated parser C. `tools/verify_release_tree.py` enforces this boundary before every harness run;
 the user-triggered bootstrap fetches the pinned test input and keeps all derived AOT files ignored.
 
+The V1.0 canonical performance rotation remains six empty-body HTTP/1.1 GET requests. LuminaWAF
+v0.4.2 supports bounded request bodies in the production NGINX adapter, but the existing canonical
+rows must not be described as body-ingestion measurements. Body-path publication requires a
+separate byte-identical cross-engine workload, repeated E2E evidence and bystander-latency
+qualification. The adapter's current protocol evidence covers HTTP/1.1 and HTTP/2; HTTP/3 remains
+unclaimed pending a pinned QUIC-capable test build.
+
 Publication runs use:
 
 ```bash
@@ -87,11 +94,16 @@ of the slowest engine's highest stable point, then computes the fixed-rate durat
 100,000-response budget, the 90% achieved-rate floor and a 10% safety margin. The immutable choice
 is written to `sampling_plan.json`. `LUMINA_BENCH_V1_FIXED_RATE` and `LUMINA_BENCH_V1_FIXED_DURATION` may only
 override this plan when they remain below the calibrated rate ceiling and above the required sample
-duration.
+duration. A selected saturation point also requires load-generator utilization no greater than
+90%. Before the long fixed-rate phase, the runner compares the plain-NGINX baseline from the main
+and overhead sweeps at the same connection point. Publication fails when median RPS differs by more
+than 10% or server CPU/request differs by more than 15%.
 
 Smoke reports show Google Benchmark's real inner CV across ten repetitions. Process-level CI stays
 `N/A` until at least two independent processes exist, and p99/p99.9 remain withheld until their
-sample thresholds are met. Use `qualification` or `canonical` to collect publishable tails.
+sample thresholds are met. Its closed-loop table is a throughput sweep, not a sustainable
+saturation claim. A body row with one accepted transaction is labeled as a single observation,
+not a percentile. Use `qualification` or `canonical` to collect publishable tails.
 
 Set `LUMINA_BENCH_V1_SERVER_CPU`, `LUMINA_BENCH_V1_CLIENT_CPU` and optionally
 `LUMINA_BENCH_V1_MICRO_CPU` to the isolated CPU sets prepared for the run. Canonical
@@ -127,6 +139,67 @@ measurement. `artifact_preflight.json` and
 `artifact_postflight.json` prove that measured binaries, modules, configurations and build
 provenance, including every manifest-owned CRS/data input, did not drift during the run.
 
+For structured request-body diagnostics, generated ModSecurity and Coraza policies use identical
+phase-1 XML/JSON processor selectors before the shared CRS includes. The direct 128 KiB JSON rows
+run an untimed escaped-value probe that fails unless decoded JSON reaches the inspected
+collections. Both the repeated-token and deterministic varied fixtures are byte-identical across
+LuminaWAF, ModSecurity and Coraza, and each fixture is built before the measured loop.
+ModSecurity's private pinned PCRE2 is built with JIT enabled and records that fact in dependency
+provenance; long-body comparator rows are invalid without these gates.
+
+### Request-Body Evidence Status
+
+Request-body behavior currently has four distinct verification boundaries:
+
+1. `tests/integration/test_nginx_request_body.py` validates production NGINX ingestion and
+   fail-closed behavior over HTTP/1.1 and HTTP/2, including limits, byte preservation, JSON, XML,
+   multipart and unsupported representations. These are functional integration tests, not
+   performance measurements.
+2. `request_body_complexity_gate` measures LuminaWAF thread CPU for deterministic JSON fixtures
+   from 4 KiB through 128 KiB. It checks verdict stability and rejects super-linear growth above
+   its adjacent and two-doubling limits. It is a Lumina-only complexity regression gate, not a
+   cross-engine comparison.
+3. The repository one-liner retains repeated-token and deterministic-varied 128 KiB JSON direct
+   transactions for LuminaWAF, ModSecurity and Coraza. Qualified modes require five independent
+   processes with ten raw repetitions and grouped PMU evidence for the varied allow fixture.
+4. `body_evidence.py` generates exact-size 4, 16 and 128 KiB JSON allow and tail-attack requests.
+   Qualified runs calibrate each engine with at least five `30s` repetitions, require RPS CV
+   `<=5%`, freeze a plan at no more than 60% of that rate, and then run byte-identical POST
+   requests through NGINX. Smoke uses three `5s` calibration repetitions (`10s` for 128 KiB) and
+   no more than 40% of their median rate. The fixed response backend runs in the same NGINX
+   process, so its CPU remains in server accounting.
+
+The qualified sample contract is:
+
+| Body | Samples per engine per run | Reported percentiles | Evidence class |
+|---:|---:|---|---|
+| 4 KiB | 10,000 | p50, p90, p99 | body latency |
+| 16 KiB | 1,000 | p50, p90 | sample-capped diagnostic |
+| 128 KiB | 1,000 LuminaWAF/ModSecurity; 100 Coraza | p50/p90 fast engines; p50 Coraza | time-capped diagnostic |
+
+Every row requires five valid runs, exact expected HTTP outcomes and zero socket errors. p99.9 is
+always withheld because this matrix does not collect its 100,000-sample floor. Qualified rates
+below `1 RPS` and smoke rates below the `10 RPS` short-run histogram floor switch explicitly to
+one closed-loop connection. Body runs use a recorded `30s` request timeout so a slow but completed
+comparator transaction is not mislabeled as zero throughput.
+Fixed-rate percentile gates use HdrHistogram's recorded `Total count`, not the number of completed
+HTTP responses. Missing or empty histograms invalidate the leg.
+
+These E2E percentiles are absolute per-engine observations at normalized load, not same-rate
+latency comparisons. Direct CPU/PMU rows remain the appropriate boundary for comparing engine
+work on the identical 128 KiB value.
+The report marks a row `ANOMALOUS - investigation required` when fixed-rate p50 diverges sharply
+from calibration or when an adjacent body-size trend inverts by more than `4x`. Such evidence is
+retained for diagnosis and cannot qualify.
+For Lumina, the report also exposes per-transaction dispatches, exact-verifier calls and exact
+subject bytes for `934100`, `934101` and `934120`. These are logical-work diagnostics, not
+per-rule hardware PMU attribution.
+
+Correctness payloads come from the pinned public OWASP CRS/go-ftw suite. The harness records the
+CRS commit, selected test IDs and selection hashes but does not vendor CRS rules or test files.
+Third-party payload collections may supplement fuzzing; they do not define parity or performance
+claims.
+
 ## Result Classes
 
 1. **Correctness:** FTW/CRS verdicts, exact rule matches where available,
@@ -140,7 +213,8 @@ provenance, including every manifest-owned CRS/data input, did not drift during 
    p50/p90/p99/p99.9 distributions and coordinated-omission resistance.
 4. **Saturation:** closed-loop maximum sustainable throughput. Queueing latency
    from this mode is never substituted for service latency. Canonical points
-   require five runs and RPS CV no greater than 5%.
+   require five runs, RPS CV no greater than 5%, client CPU no greater than 90% and a consistent
+   plain-NGINX baseline across the main and overhead phases.
 5. **Controlled scaling:** synthetic 1/10/100/1000 rule experiments, isolated
    from all CRS PL2 tables and labeled synthetic.
 6. **LuminaWAF overhead decomposition:** E0 plain NGINX, E1 the identical Lumina module with
@@ -150,11 +224,20 @@ provenance, including every manifest-owned CRS/data input, did not drift during 
 7. **Multi-worker scaling:** optional closed-loop 1/2/4/8-worker throughput, speedup, efficiency,
    RPS/worker, CPU/request and load-generator headroom. It is a deployment-scaling result, not a
    replacement for single-worker latency or direct transaction CPU time.
+8. **Request-body evidence:** direct 128 KiB JSON transaction CPU and PMU plus bounded 4/16/128 KiB
+   NGINX E2E diagnostics. This section does not relabel the bodyless canonical GET workload.
 
 Qualified runs also emit PMU diagnostics for the allow transaction: cycles and instructions per
 transaction, IPC, branch-miss rate, generic cache-miss rate, L1D, LLC and iTLB miss rates, and the
 minimum counter running percentage. Numerator/denominator pairs execute in separate small atomic
 groups; unsupported cache events remain `unavailable` without suppressing IPC or branch metrics.
 The `InspectPrebuilt` and `FullDirect` overhead kernels receive the same grouped PMU treatment.
+`BundleBuild`, `InspectPrebuilt` and `FullDirect` run as separate benchmark processes with rotated
+boundary order. They are compiler-visible boundaries, not nested function timers, so their
+medians are not subtracted from each other.
+
+The manifest also emits `source_rule_inventory.json`, which classifies every inbound PL2 source ID
+as generated, runtime-native, control/setup/meta, non-score-bearing or unsupported score-bearing.
+No `subsumed` relationship is inferred from rule counts.
 
 The normative protocol is documented in [methodology/README.md](../../methodology/README.md).

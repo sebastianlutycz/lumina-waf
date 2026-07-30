@@ -6,7 +6,7 @@ Compiles the OWASP CRS ruleset into branchless, first-byte-bitmask-routed
 native C (Atomic Branchless Bitmask philosophy). Per IMPORTANT.md the engine is
 a WAF *compiler*, not an interpreter: zero runtime .conf parsing.
 
-Design (ABB):
+Design:
   * Each detection rule -> `lumina_scan_rule_<id>(data,len,offset)` compiled from
     the regex AST into `match &= (cur<len && cond); cur += match;` (no per-rule
     branch, single terminal return).
@@ -49,6 +49,7 @@ _TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 from regex_dfa import (UnsupportedRegex as DfaUnsupportedRegex,
+                       compile_alphabet_requirement_dnf,
                        compile_bitset_nfa,
                        compile_mandatory_seed_cover,
                        compile_seeded_fast_accept_branches, compile_dfa_ast,
@@ -1274,6 +1275,94 @@ def emit_crlf_command_grammar(rule_id, pattern):
     return '\n'.join(code)
 
 
+def percent_hex_pair_search_plan(pattern):
+    """Recognize an unanchored percent followed by exactly two hex digits."""
+    try:
+        ast, ignore_case, dot_all = parse_regex_ast(pattern)
+    except Exception:
+        return None
+    if ignore_case or dot_all or len(ast) != 2:
+        return None
+    literal_type, literal_value = ast[0]
+    repeat_type, repeat_value = ast[1]
+    if (getattr(literal_type, 'name', '') != 'LITERAL' or
+            literal_value != ord('%') or
+            getattr(repeat_type, 'name', '') not in
+            ('MIN_REPEAT', 'MAX_REPEAT')):
+        return None
+    minimum, maximum, inner = repeat_value
+    if int(minimum) != 2 or int(maximum) != 2 or len(inner) != 1:
+        return None
+    class_type, class_value = inner[0]
+    if getattr(class_type, 'name', '') != 'IN':
+        return None
+    masks = build_bitmask_for_in(class_value, False)
+    observed = {
+        byte for byte in range(256)
+        if masks[byte >> 6] & (1 << (byte & 63))
+    }
+    expected = set(range(ord('0'), ord('9') + 1))
+    expected.update(range(ord('A'), ord('F') + 1))
+    expected.update(range(ord('a'), ord('f') + 1))
+    return {} if observed == expected else None
+
+
+def emit_percent_hex_pair_search(rule_id, pattern):
+    """Emit one exact linear search for a percent-encoded byte."""
+    if percent_hex_pair_search_plan(pattern) is None:
+        raise ValueError('pattern is not an exact percent-hex-pair search')
+    return f"""
+static inline int lumina_hex_digit_{rule_id}(uint8_t byte) {{
+    uint8_t folded = (uint8_t)(byte | 0x20u);
+    return (byte >= '0' && byte <= '9') ||
+           (folded >= 'a' && folded <= 'f');
+}}
+int lumina_scan_rule_{rule_id}(
+        const unsigned char *data, size_t len, size_t offset) {{
+    if (offset != 0 || len < 3) return 0;
+    for (size_t pos = 0; pos + 2 < len; ++pos) {{
+        if (data[pos] == '%' &&
+            lumina_hex_digit_{rule_id}(data[pos + 1]) &&
+            lumina_hex_digit_{rule_id}(data[pos + 2]))
+            return {rule_id};
+    }}
+    return 0;
+}}
+"""
+
+
+MULTIMATCH_PREFIX_DAG_EXPECTED = {
+    '934100': (
+        'none', 'urldecodeuni', 'jsdecode', 'removewhitespace',
+        'base64decode', 'urldecodeuni', 'jsdecode', 'removewhitespace',
+    ),
+    '934160': (
+        'none', 'urldecodeuni', 'jsdecode', 'base64decode',
+        'urldecodeuni', 'jsdecode', 'replacecomments',
+    ),
+    '934101': (
+        'none', 'urldecodeuni', 'jsdecode', 'base64decode',
+        'urldecodeuni', 'jsdecode',
+    ),
+}
+
+
+def multimatch_prefix_dag_plan(detection):
+    """Return engine indices only for the exact CRS 9341xx prefix DAG."""
+    plan = {}
+    for idx, rule in enumerate(detection):
+        rule_id = str(rule.get('id'))
+        expected = MULTIMATCH_PREFIX_DAG_EXPECTED.get(rule_id)
+        if expected is None:
+            continue
+        observed = tuple(
+            str(transform).lower().replace('_', '').replace(' ', '')
+            for transform in (rule.get('transforms') or []))
+        if rule.get('multimatch') and observed == expected:
+            plan[rule_id] = idx
+    return plan if len(plan) == len(MULTIMATCH_PREFIX_DAG_EXPECTED) else None
+
+
 def _fixed_token_sequences(nodes, limit=64, max_width=4):
     variants = [b'']
     for node_type, value in nodes:
@@ -1516,9 +1605,1167 @@ def transform_aware_first_bytes(pattern, transforms):
     return result
 
 
+_MANDATORY_BYTE_COMMONNESS = {
+    byte: rank
+    for rank, byte in enumerate(b"etaoinshrdlucmfwypvbgkjqxz")
+}
+
+
+def mandatory_seed_probe_bytes(rule):
+    """Select sound, low-frequency byte probes for a positive scalar regex.
+
+    One probe is selected from every translator-proven mandatory seed. A rule
+    may be rejected only when none of those probes occurs and its transform
+    sequence is identity for the current value.
+    """
+    if (rule.get('operator') != '@rx' or rule.get('negated') or
+            rule.get('_tx_chain') or rule.get('_chain_members')):
+        return ()
+    try:
+        cover = compile_mandatory_seed_cover(
+            rule.get('pattern') or '', min_seed_len=1, max_seeds=16)
+    except (DfaUnsupportedRegex, ValueError, TypeError):
+        return ()
+    if not cover:
+        return ()
+
+    ignore_case = bool(cover['ignore_case'])
+
+    def normalized(byte):
+        if ignore_case and ord('A') <= byte <= ord('Z'):
+            return byte | 0x20
+        return byte
+
+    def probe_rank(byte):
+        value = normalized(byte)
+        if not ((ord('a') <= value <= ord('z')) or
+                (ord('0') <= value <= ord('9'))):
+            return (0, value)
+        if ord('0') <= value <= ord('9'):
+            return (1, value)
+        # Prefer letters that are uncommon in ordinary text.
+        return (2, -_MANDATORY_BYTE_COMMONNESS.get(value, 0), value)
+
+    probes = set()
+    for seed in cover['seeds']:
+        if not seed:
+            return ()
+        probe = min(seed, key=probe_rank)
+        probes.add(normalized(probe))
+        if ignore_case and ord('a') <= normalized(probe) <= ord('z'):
+            probes.add(normalized(probe) ^ 0x20)
+    return tuple(sorted(probes))
+
+
+def _seed_byte_score(byte):
+    if not ((ord('a') <= byte <= ord('z')) or
+            (ord('0') <= byte <= ord('9'))):
+        return 64
+    if ord('0') <= byte <= ord('9'):
+        return 32
+    return _MANDATORY_BYTE_COMMONNESS.get(byte, 48)
+
+
+def select_shared_seed_fragment(seed, max_length=3):
+    """Select a short necessary substring for the shared rejection router."""
+    if isinstance(seed, str):
+        seed = seed.encode('utf-8', 'replace')
+    seed = bytes(
+        byte | 0x20 if ord('A') <= byte <= ord('Z') else byte
+        for byte in seed
+    )
+    if not seed or max_length < 1:
+        return b''
+    if len(seed) <= max_length:
+        return seed
+
+    windows = (
+        seed[start:start + max_length]
+        for start in range(len(seed) - max_length + 1)
+    )
+    return max(windows, key=lambda value: (
+        sum(_seed_byte_score(byte) for byte in value), value))
+
+
+def build_shared_seed_gate(rule_seed_sets, rule_count, mask_words):
+    """Build a bounded 1/2/3-byte necessary-fragment router.
+
+    A rule is marked possible when any selected fragment from its alternative
+    cover occurs. The exact matcher remains authoritative.
+    """
+    fragment_rules = {}
+    rule_mask = [0] * mask_words
+    for rule_index, seeds in rule_seed_sets:
+        fragments = {
+            select_shared_seed_fragment(seed)
+            for seed in seeds
+            if seed
+        }
+        fragments.discard(b'')
+        if not fragments:
+            continue
+        rule_mask[rule_index >> 6] |= 1 << (rule_index & 63)
+        for fragment in fragments:
+            words = fragment_rules.setdefault(fragment, [0] * mask_words)
+            words[rule_index >> 6] |= 1 << (rule_index & 63)
+
+    output_classes = [[0] * mask_words]
+    output_class_ids = {tuple(output_classes[0]): 0}
+
+    def output_class(words):
+        key = tuple(words)
+        class_id = output_class_ids.get(key)
+        if class_id is None:
+            class_id = len(output_classes)
+            output_class_ids[key] = class_id
+            output_classes.append(list(words))
+        return class_id
+
+    byte_classes = [0] * 256
+    pair_classes = [0] * 65536
+    triple_items = []
+    for fragment, words in sorted(fragment_rules.items()):
+        class_id = output_class(words)
+        if len(fragment) == 1:
+            byte_classes[fragment[0]] = class_id
+        elif len(fragment) == 2:
+            pair_classes[(fragment[0] << 8) | fragment[1]] = class_id
+        elif len(fragment) == 3:
+            key = (fragment[0] << 16) | (fragment[1] << 8) | fragment[2]
+            triple_items.append((key, class_id))
+        else:
+            raise ValueError("shared seed fragment exceeds three bytes")
+
+    hash_size = 1
+    while hash_size < max(2, len(triple_items) * 2):
+        hash_size <<= 1
+    triple_keys = [0] * hash_size
+    triple_classes = [0] * hash_size
+    triple_bloom = [0] * 1024
+    for key, class_id in triple_items:
+        bloom_bit = (key * 2246822519) & 0xffff
+        triple_bloom[bloom_bit >> 6] |= 1 << (bloom_bit & 63)
+        stored_key = key + 1
+        slot = (key * 2654435761) & (hash_size - 1)
+        while triple_keys[slot] not in (0, stored_key):
+            slot = (slot + 1) & (hash_size - 1)
+        if triple_keys[slot] == stored_key:
+            merged = [
+                left | right
+                for left, right in zip(
+                    output_classes[triple_classes[slot]],
+                    output_classes[class_id])
+            ]
+            class_id = output_class(merged)
+        triple_keys[slot] = stored_key
+        triple_classes[slot] = class_id
+
+    if len(output_classes) > 65535:
+        raise ValueError("shared seed output class exceeds uint16_t")
+    return {
+        'byte_classes': byte_classes,
+        'pair_classes': pair_classes,
+        'triple_keys': triple_keys,
+        'triple_classes': triple_classes,
+        'triple_bloom': triple_bloom,
+        'output_classes': output_classes,
+        'rule_mask': rule_mask,
+        'rule_count': sum(word.bit_count() for word in rule_mask),
+        'fragment_count': len(fragment_rules),
+        'fragment_rules': fragment_rules,
+    }
+
+
+def build_contextual_seed_gate(rule_plans, rule_count, mask_words):
+    """Build a `literal[1..3] + next-byte-class` rejection router.
+
+    Every finite suffix alternative contributes one local witness. The router
+    can retain unrelated witnesses, but a missing rule bit proves that none of
+    its alternatives can match.
+    """
+    all_bytes_mask = (1 << 256) - 1
+
+    def lowercase_mask(mask):
+        normalized = 0
+        pending = mask & all_bytes_mask
+        while pending:
+            bit = pending & -pending
+            byte = bit.bit_length() - 1
+            pending ^= bit
+            if ord('A') <= byte <= ord('Z'):
+                byte |= 0x20
+            normalized |= 1 << byte
+        return normalized
+
+    key_next_rules = {}
+    rule_mask = [0] * mask_words
+    witness_count = 0
+    for rule_index, plan in rule_plans:
+        rule_word = rule_index >> 6
+        rule_bit = 1 << (rule_index & 63)
+        alternatives = []
+        for sequence in plan['patterns']:
+            normalized = [
+                token if token < 0 else lowercase_mask(token)
+                for token in sequence
+            ]
+            witness = None
+            for literal_length in (3, 2, 1):
+                candidates = []
+                for start in range(len(normalized) - literal_length):
+                    literal_masks = normalized[
+                        start:start + literal_length]
+                    next_mask = normalized[start + literal_length]
+                    if next_mask <= 0:
+                        continue
+                    if any(mask == 0 or mask & (mask - 1)
+                           for mask in literal_masks):
+                        continue
+                    literal = bytes(
+                        mask.bit_length() - 1 for mask in literal_masks)
+                    candidates.append((literal, next_mask))
+                if candidates:
+                    witness = max(candidates, key=lambda item: (
+                        sum(_seed_byte_score(byte) for byte in item[0]),
+                        item[0], item[1]))
+                    break
+            if witness is None:
+                alternatives = []
+                break
+            alternatives.append(witness)
+        if not alternatives:
+            continue
+        rule_mask[rule_word] |= rule_bit
+        for literal, next_mask in alternatives:
+            key = (len(literal), int.from_bytes(literal, 'big'))
+            next_rules = key_next_rules.setdefault(
+                key, [[0] * mask_words for _ in range(256)])
+            pending = next_mask
+            while pending:
+                bit = pending & -pending
+                byte = bit.bit_length() - 1
+                pending ^= bit
+                next_rules[byte][rule_word] |= rule_bit
+            witness_count += 1
+
+    output_ids = {tuple([0] * mask_words): 0}
+    output_classes = [[0] * mask_words]
+    row_ids = {tuple([0] * 256): 0}
+    next_rows = [[0] * 256]
+
+    def intern_row(next_rules):
+        row = []
+        for words in next_rules:
+            key = tuple(words)
+            class_id = output_ids.get(key)
+            if class_id is None:
+                class_id = len(output_classes)
+                output_ids[key] = class_id
+                output_classes.append(list(words))
+            row.append(class_id)
+        key = tuple(row)
+        row_id = row_ids.get(key)
+        if row_id is None:
+            row_id = len(next_rows)
+            row_ids[key] = row_id
+            next_rows.append(row)
+        return row_id
+
+    byte_rows = [0] * 256
+    pair_rows = [0] * 65536
+    triple_items = []
+    for (length, key), next_rules in sorted(key_next_rules.items()):
+        row_id = intern_row(next_rules)
+        if length == 1:
+            byte_rows[key] = row_id
+        elif length == 2:
+            pair_rows[key] = row_id
+        elif length == 3:
+            triple_items.append((key, row_id))
+        else:
+            raise ValueError("contextual seed literal exceeds three bytes")
+
+    hash_size = 1
+    while hash_size < max(2, len(triple_items) * 2):
+        hash_size <<= 1
+    triple_keys = [0] * hash_size
+    triple_rows = [0] * hash_size
+    triple_bloom = [0] * 1024
+    for key, row_id in triple_items:
+        bloom_bit = (key * 2246822519) & 0xffff
+        triple_bloom[bloom_bit >> 6] |= 1 << (bloom_bit & 63)
+        stored_key = key + 1
+        slot = (key * 2654435761) & (hash_size - 1)
+        while triple_keys[slot] not in (0, stored_key):
+            slot = (slot + 1) & (hash_size - 1)
+        if triple_keys[slot] != 0:
+            raise ValueError("duplicate contextual triple key")
+        triple_keys[slot] = stored_key
+        triple_rows[slot] = row_id
+
+    if len(output_classes) > 255:
+        raise ValueError("contextual seed output class exceeds uint8_t")
+    if len(next_rows) > 65535:
+        raise ValueError("contextual seed row exceeds uint16_t")
+    return {
+        'byte_rows': byte_rows,
+        'pair_rows': pair_rows,
+        'triple_keys': triple_keys,
+        'triple_rows': triple_rows,
+        'triple_bloom': triple_bloom,
+        'next_rows': next_rows,
+        'output_classes': output_classes,
+        'rule_mask': rule_mask,
+        'rule_count': sum(word.bit_count() for word in rule_mask),
+        'witness_count': witness_count,
+        'key_count': len(key_next_rules),
+        'key_next_rules': key_next_rules,
+    }
+
+
+def build_extended_shared_seed_patterns(
+        rule_seed_sets, mask_words, max_fragment_length):
+    """Build longer necessary fragments for the combined proof automaton."""
+    fragment_rules = {}
+    rule_mask = [0] * mask_words
+    for rule_index, seeds in rule_seed_sets:
+        fragments = {
+            select_shared_seed_fragment(
+                seed, max_length=max_fragment_length)
+            for seed in seeds
+            if seed
+        }
+        fragments.discard(b'')
+        if not fragments:
+            continue
+        rule_mask[rule_index >> 6] |= 1 << (rule_index & 63)
+        for fragment in fragments:
+            words = fragment_rules.setdefault(fragment, [0] * mask_words)
+            words[rule_index >> 6] |= 1 << (rule_index & 63)
+    return {
+        'fragment_rules': fragment_rules,
+        'rule_mask': rule_mask,
+        'rule_count': sum(word.bit_count() for word in rule_mask),
+        'fragment_count': len(fragment_rules),
+    }
+
+
+def build_extended_contextual_seed_patterns(
+        rule_plans, mask_words, max_literal_length):
+    """Build longer literal-plus-next-byte witnesses for the proof automaton."""
+    all_bytes_mask = (1 << 256) - 1
+    uppercase_mask = sum(
+        1 << byte for byte in range(ord('A'), ord('Z') + 1))
+    folded_domain_mask = all_bytes_mask & ~uppercase_mask
+    word_mask = (
+        sum(1 << byte for byte in range(ord('a'), ord('z') + 1)) |
+        sum(1 << byte for byte in range(ord('0'), ord('9') + 1)) |
+        (1 << ord('_')))
+    nonword_mask = folded_domain_mask & ~word_mask
+
+    def lowercase_mask(mask):
+        normalized = 0
+        pending = mask & all_bytes_mask
+        while pending:
+            bit = pending & -pending
+            byte = bit.bit_length() - 1
+            pending ^= bit
+            if ord('A') <= byte <= ord('Z'):
+                byte |= 0x20
+            normalized |= 1 << byte
+        return normalized
+
+    def assertion_context(token, previous_byte):
+        previous_word = bool(word_mask & (1 << previous_byte))
+        if token == -1:
+            return (
+                nonword_mask if previous_word else word_mask,
+                previous_word)
+        if token == -2:
+            return (
+                word_mask if previous_word else nonword_mask,
+                not previous_word)
+        if token == -4:
+            return 0, True
+        return None
+
+    key_next_rules = {}
+    key_next_alternatives = {}
+    alternative_rules = []
+    alternative_requirements = []
+    alternative_seed_lengths = []
+    alternative_seed_offsets = []
+    alternative_assertions = []
+    rule_mask = [0] * mask_words
+    witness_count = 0
+    for rule_index, plan in rule_plans:
+        rule_word = rule_index >> 6
+        rule_bit = 1 << (rule_index & 63)
+        alternatives = []
+        for sequence in plan['patterns']:
+            normalized = [
+                token if token < 0 else lowercase_mask(token)
+                for token in sequence
+            ]
+            witness = None
+            maximum = min(max_literal_length, len(normalized) - 1)
+            for literal_length in range(maximum, 0, -1):
+                candidates = []
+                for start in range(len(normalized) - literal_length):
+                    literal_masks = normalized[
+                        start:start + literal_length]
+                    if any(mask == 0 or mask & (mask - 1)
+                           for mask in literal_masks):
+                        continue
+                    literal = bytes(
+                        mask.bit_length() - 1 for mask in literal_masks)
+                    next_token = normalized[start + literal_length]
+                    if next_token > 0:
+                        next_mask = next_token
+                        eof = False
+                    else:
+                        context = assertion_context(
+                            next_token, literal[-1])
+                        if context is None:
+                            continue
+                        next_mask, eof = context
+                    candidates.append((literal, next_mask, eof, start))
+                if candidates:
+                    witness = max(candidates, key=lambda item: (
+                        not bool(item[1] & word_mask),
+                        item[2],
+                        sum(_seed_byte_score(byte) for byte in item[0]),
+                        item[0], item[1]))
+                    break
+            if witness is None:
+                alternatives = []
+                break
+            alternatives.append(witness)
+        if not alternatives:
+            continue
+        rule_mask[rule_word] |= rule_bit
+        for sequence, (literal, next_mask, eof, literal_start) in zip(
+                plan['patterns'], alternatives):
+            normalized_requirements = {
+                lowercase_mask(token)
+                for token in sequence
+                if token > 0 and lowercase_mask(token) != folded_domain_mask
+            }
+            requirements = tuple(sorted(
+                mask
+                for mask in normalized_requirements
+                if not any(
+                    other != mask and other & ~mask == 0
+                    for other in normalized_requirements)
+            ))
+            alternative_id = len(alternative_rules)
+            alternative_rules.append(rule_index)
+            alternative_requirements.append(requirements)
+            alternative_seed_lengths.append(len(literal))
+            alternative_seed_offsets.append(sum(
+                token > 0 for token in sequence[:literal_start]))
+            consumed = 0
+            assertions = []
+            for token in sequence:
+                if token > 0:
+                    consumed += 1
+                else:
+                    assertions.append((token, consumed))
+            alternative_assertions.append(tuple(assertions))
+            key = (len(literal), int.from_bytes(literal, 'big'))
+            next_rules = key_next_rules.setdefault(
+                key, [[0] * mask_words for _ in range(257)])
+            next_alternatives = key_next_alternatives.setdefault(
+                key, [set() for _ in range(257)])
+            pending = next_mask
+            while pending:
+                bit = pending & -pending
+                byte = bit.bit_length() - 1
+                pending ^= bit
+                next_rules[byte][rule_word] |= rule_bit
+                next_alternatives[byte].add(alternative_id)
+            if eof:
+                next_rules[256][rule_word] |= rule_bit
+                next_alternatives[256].add(alternative_id)
+            witness_count += 1
+    return {
+        'key_next_rules': key_next_rules,
+        'key_next_alternatives': key_next_alternatives,
+        'alternative_rules': alternative_rules,
+        'alternative_requirements': alternative_requirements,
+        'alternative_seed_lengths': alternative_seed_lengths,
+        'alternative_seed_offsets': alternative_seed_offsets,
+        'alternative_assertions': alternative_assertions,
+        'rule_mask': rule_mask,
+        'rule_count': sum(word.bit_count() for word in rule_mask),
+        'witness_count': witness_count,
+        'key_count': len(key_next_rules),
+    }
+
+
+def build_combined_seed_proof_ac(shared_gate, contextual_gate, mask_words):
+    """Build one failure-resolved proof automaton over both seed key sets."""
+    max_pattern_length = max(
+        [len(pattern) for pattern in shared_gate['fragment_rules']]
+        + [length for length, _ in contextual_gate['key_next_rules']],
+        default=1,
+    )
+    children = [{}]
+    fail = [0]
+    shared_outputs = [[0] * mask_words]
+    context_outputs = [{}]
+    context_alternative_outputs = [{}]
+
+    def add_pattern(pattern):
+        state = 0
+        for byte in pattern:
+            next_state = children[state].get(byte)
+            if next_state is None:
+                next_state = len(children)
+                children[state][byte] = next_state
+                children.append({})
+                fail.append(0)
+                shared_outputs.append([0] * mask_words)
+                context_outputs.append({})
+                context_alternative_outputs.append({})
+            state = next_state
+        return state
+
+    for pattern, words in sorted(shared_gate['fragment_rules'].items()):
+        state = add_pattern(pattern)
+        shared_outputs[state] = [
+            left | right
+            for left, right in zip(shared_outputs[state], words)
+        ]
+
+    context_width = max((
+        len(next_rules)
+        for next_rules in contextual_gate['key_next_rules'].values()
+    ), default=256)
+    if context_width not in (256, 257):
+        raise ValueError("combined seed proof AC has invalid context width")
+    for (length, key), next_rules in sorted(
+            contextual_gate['key_next_rules'].items()):
+        if len(next_rules) != context_width:
+            raise ValueError("combined seed proof AC mixes context widths")
+        pattern = key.to_bytes(length, 'big')
+        state = add_pattern(pattern)
+        state_context = context_outputs[state]
+        state_alternatives = context_alternative_outputs[state]
+        next_alternatives = contextual_gate.get(
+            'key_next_alternatives', {}).get((length, key))
+        for next_byte, words in enumerate(next_rules):
+            if not any(words):
+                continue
+            previous = state_context.get(next_byte, [0] * mask_words)
+            state_context[next_byte] = [
+                left | right for left, right in zip(previous, words)
+            ]
+            if next_alternatives:
+                state_alternatives.setdefault(
+                    next_byte, set()).update(next_alternatives[next_byte])
+
+    queue = list(children[0].values())
+    queue_pos = 0
+    while queue_pos < len(queue):
+        state = queue[queue_pos]
+        queue_pos += 1
+        inherited = fail[state]
+        shared_outputs[state] = [
+            left | right
+            for left, right in zip(
+                shared_outputs[state], shared_outputs[inherited])
+        ]
+        if context_outputs[inherited]:
+            merged = dict(context_outputs[state])
+            for next_byte, words in context_outputs[inherited].items():
+                previous = merged.get(next_byte, [0] * mask_words)
+                merged[next_byte] = [
+                    left | right for left, right in zip(previous, words)
+                ]
+            context_outputs[state] = merged
+        if context_alternative_outputs[inherited]:
+            merged_alternatives = {
+                next_byte: set(alternatives)
+                for next_byte, alternatives
+                in context_alternative_outputs[state].items()
+            }
+            for next_byte, alternatives in (
+                    context_alternative_outputs[inherited].items()):
+                merged_alternatives.setdefault(
+                    next_byte, set()).update(alternatives)
+            context_alternative_outputs[state] = merged_alternatives
+        for byte, next_state in children[state].items():
+            fallback = fail[state]
+            while fallback and byte not in children[fallback]:
+                fallback = fail[fallback]
+            fail[next_state] = children[fallback].get(byte, 0)
+            queue.append(next_state)
+
+    if len(children) > 65535:
+        raise ValueError("combined seed proof AC exceeds uint16_t states")
+
+    state_order = [0] + queue
+    resolved = [[0] * 256 for _ in children]
+    for state in state_order:
+        for byte in range(256):
+            next_state = children[state].get(byte)
+            if next_state is None and state:
+                next_state = resolved[fail[state]][byte]
+            resolved[state][byte] = next_state or 0
+
+    byte_classes = [0] * 256
+    columns = []
+    column_ids = {}
+    for byte in range(256):
+        column = tuple(resolved[state][byte] for state in range(len(children)))
+        class_id = column_ids.get(column)
+        if class_id is None:
+            class_id = len(columns)
+            column_ids[column] = class_id
+            columns.append(column)
+        byte_classes[byte] = class_id
+    transitions = [
+        columns[class_id][state]
+        for state in range(len(children))
+        for class_id in range(len(columns))
+    ]
+    output_classes = [[0] * mask_words]
+    output_ids = {tuple(output_classes[0]): 0}
+
+    def output_class(words):
+        key = tuple(words)
+        class_id = output_ids.get(key)
+        if class_id is None:
+            class_id = len(output_classes)
+            output_ids[key] = class_id
+            output_classes.append(list(words))
+        return class_id
+
+    shared_classes = [
+        output_class(words) for words in shared_outputs
+    ]
+    next_rows = [[0] * context_width]
+    next_alternative_rows = [[0] * context_width]
+    next_row_ids = {(tuple(next_rows[0]),
+                     tuple(next_alternative_rows[0])): 0}
+    alternative_output_classes = [()]
+    alternative_output_ids = {(): 0}
+
+    def alternative_output_class(alternatives):
+        key = tuple(sorted(alternatives))
+        class_id = alternative_output_ids.get(key)
+        if class_id is None:
+            class_id = len(alternative_output_classes)
+            alternative_output_ids[key] = class_id
+            alternative_output_classes.append(key)
+        return class_id
+
+    context_rows = []
+    for state_context, state_alternatives in zip(
+            context_outputs, context_alternative_outputs):
+        row = [0] * context_width
+        alternative_row = [0] * context_width
+        for next_byte, words in state_context.items():
+            row[next_byte] = output_class(words)
+        for next_byte, alternatives in state_alternatives.items():
+            alternative_row[next_byte] = alternative_output_class(alternatives)
+        key = (tuple(row), tuple(alternative_row))
+        row_id = next_row_ids.get(key)
+        if row_id is None:
+            row_id = len(next_rows)
+            next_row_ids[key] = row_id
+            next_rows.append(row)
+            next_alternative_rows.append(alternative_row)
+        context_rows.append(row_id)
+
+    if len(columns) > 255:
+        raise ValueError("combined seed proof AC exceeds uint8_t alphabet")
+    if len(output_classes) > 65535:
+        raise ValueError("combined seed proof AC exceeds uint16_t outputs")
+    if len(next_rows) > 65535:
+        raise ValueError("combined seed proof AC exceeds uint16_t context rows")
+    return {
+        'byte_classes': byte_classes,
+        'transitions': transitions,
+        'state_count': len(children),
+        'class_count': len(columns),
+        'shared_classes': shared_classes,
+        'context_rows': context_rows,
+        'next_rows': next_rows,
+        'next_alternative_rows': next_alternative_rows,
+        'output_classes': output_classes,
+        'context_width': context_width,
+        'alternative_output_classes': alternative_output_classes,
+        'alternative_rules': contextual_gate.get('alternative_rules', ()),
+        'alternative_requirements': contextual_gate.get(
+            'alternative_requirements', ()),
+        'alternative_seed_lengths': contextual_gate.get(
+            'alternative_seed_lengths', ()),
+        'alternative_seed_offsets': contextual_gate.get(
+            'alternative_seed_offsets', ()),
+        'alternative_assertions': contextual_gate.get(
+            'alternative_assertions', ()),
+        'contextual_rule_mask': contextual_gate.get(
+            'rule_mask', [0] * mask_words),
+        'max_pattern_length': max_pattern_length,
+    }
+
+
+def emit_combined_seed_proof_ac(
+        gate, mask_words,
+        function_name='lumina_classify_seed_proofs_ac'):
+    """Emit the isolated runtime scanner for the combined proof automaton."""
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', function_name):
+        raise ValueError("invalid combined seed-proof AC function name")
+
+    def values(rows):
+        return ', '.join(str(value) for value in rows) if rows else '0'
+
+    def word_rows(rows):
+        return ',\n'.join(
+            '    {' + ', '.join(
+                f'UINT64_C({value})' for value in row) + '}'
+            for row in rows
+        )
+
+    alternative_count = len(gate['alternative_rules'])
+    refinement_declarations = []
+    refinement_locals = []
+    refinement_update = []
+    refinement_eof_update = []
+    refinement_finish = []
+    if alternative_count:
+        proof_words = (alternative_count + 63) // 64
+        alternative_offsets = [0]
+        alternative_ids = []
+        for output_class in gate['alternative_output_classes']:
+            alternative_ids.extend(output_class)
+            alternative_offsets.append(len(alternative_ids))
+
+        requirement_ids = {}
+        requirement_masks = []
+        alternative_requirement_offsets = [0]
+        alternative_requirement_ids = []
+        for requirements in gate['alternative_requirements']:
+            for requirement in requirements:
+                raw_requirement = requirement
+                for lower in range(ord('a'), ord('z') + 1):
+                    if requirement & (1 << lower):
+                        raw_requirement |= 1 << (lower ^ 0x20)
+                words = tuple(
+                    (raw_requirement >> (word * 64)) & ((1 << 64) - 1)
+                    for word in range(4))
+                requirement_id = requirement_ids.get(words)
+                if requirement_id is None:
+                    requirement_id = len(requirement_masks)
+                    requirement_ids[words] = requirement_id
+                    requirement_masks.append(words)
+                alternative_requirement_ids.append(requirement_id)
+            alternative_requirement_offsets.append(
+                len(alternative_requirement_ids))
+
+        assertion_offsets = [0]
+        assertion_tokens = []
+        assertion_positions = []
+        for assertions in gate['alternative_assertions']:
+            for token, position in assertions:
+                assertion_tokens.append(token)
+                assertion_positions.append(position)
+            assertion_offsets.append(len(assertion_tokens))
+
+        if len(gate['alternative_output_classes']) > 65535:
+            raise ValueError(
+                "combined seed proof AC exceeds uint16_t alternative outputs")
+        if len(requirement_masks) > 65535:
+            raise ValueError(
+                "combined seed proof AC exceeds uint16_t requirements")
+        if (max(gate['alternative_seed_offsets'], default=0) > 65535 or
+                max(assertion_positions, default=0) > 65535):
+            raise ValueError(
+                "combined seed proof AC exceeds uint16_t proof position")
+
+        def proof_update_lines(
+                next_expression, end_expression, indent="            "):
+            nested = indent + "    "
+            return [
+                f"{indent}if (refine_context) {{",
+                f"{nested}uint16_t proof_output = "
+                f"Q[row][{next_expression}];",
+                f"{nested}for (uint32_t item = AO[proof_output];",
+                f"{nested}     item < AO[proof_output + 1u]; ++item) {{",
+                f"{nested}    uint16_t alternative = AI[item];",
+                f"{nested}    size_t seed_end = {end_expression};",
+                f"{nested}    if ((size_t)AL[alternative] >",
+                f"{nested}        seed_end + 1u) continue;",
+                f"{nested}    size_t seed_start = seed_end + 1u -",
+                f"{nested}        (size_t)AL[alternative];",
+                f"{nested}    if (seed_start < AW[alternative]) continue;",
+                f"{nested}    size_t candidate =",
+                f"{nested}        seed_start - AW[alternative];",
+                f"{nested}    int proof_ok = 1;",
+                f"{nested}    for (uint32_t assertion = AJ[alternative];",
+                f"{nested}         assertion < AJ[alternative + 1u];",
+                f"{nested}         ++assertion) {{",
+                f"{nested}        size_t pos = candidate + AZ[assertion];",
+                f"{nested}        if (pos > len) {{ proof_ok = 0; break; }}",
+                f"{nested}        unsigned char previous =",
+                f"{nested}            pos > 0 ? data[pos - 1u] : 0;",
+                f"{nested}        unsigned char current =",
+                f"{nested}            pos < len ? data[pos] : 0;",
+                f"{nested}        int previous_word = pos > 0 &&",
+                f"{nested}            ((previous >= '0' && previous <= '9') ||",
+                f"{nested}             (previous >= 'A' && previous <= 'Z') ||",
+                f"{nested}             (previous >= 'a' && previous <= 'z') ||",
+                f"{nested}             previous == '_');",
+                f"{nested}        int current_word = pos < len &&",
+                f"{nested}            ((current >= '0' && current <= '9') ||",
+                f"{nested}             (current >= 'A' && current <= 'Z') ||",
+                f"{nested}             (current >= 'a' && current <= 'z') ||",
+                f"{nested}             current == '_');",
+                f"{nested}        int token = AT[assertion];",
+                f"{nested}        int assertion_ok =",
+                f"{nested}            (token == -1 && previous_word != current_word) ||",
+                f"{nested}            (token == -2 && previous_word == current_word) ||",
+                f"{nested}            (token == -3 && pos == 0) ||",
+                f"{nested}            (token == -4 && pos == len);",
+                f"{nested}        if (!assertion_ok) {{",
+                f"{nested}            proof_ok = 0;",
+                f"{nested}            break;",
+                f"{nested}        }}",
+                f"{nested}    }}",
+                f"{nested}    if (proof_ok)",
+                f"{nested}        proof[alternative >> 6] |=",
+                f"{nested}            UINT64_C(1) << (alternative & 63);",
+                f"{nested}}}",
+                f"{indent}}}",
+            ]
+
+        refinement_declarations = [
+            f"    enum {{ PROOF_ALT_COUNT = {alternative_count}, "
+            f"PROOF_WORDS = {proof_words}, REFINE_MIN_LEN = 1024 }};",
+            f"    static const uint16_t Q[{len(gate['next_alternative_rows'])}]"
+            f"[{gate['context_width']}] = {{",
+            *("    {" + values(row) + "},"
+              for row in gate['next_alternative_rows']),
+            "    };",
+            f"    static const uint32_t AO[{len(alternative_offsets)}] = "
+            f"{{ {values(alternative_offsets)} }};",
+            f"    static const uint16_t AI[{max(1, len(alternative_ids))}] = "
+            f"{{ {values(alternative_ids)} }};",
+            f"    static const uint32_t AP["
+            f"{len(alternative_requirement_offsets)}] = "
+            f"{{ {values(alternative_requirement_offsets)} }};",
+            f"    static const uint16_t AX["
+            f"{max(1, len(alternative_requirement_ids))}] = "
+            f"{{ {values(alternative_requirement_ids)} }};",
+            f"    static const uint64_t AM[{max(1, len(requirement_masks))}]"
+            "[4] = {",
+            word_rows(requirement_masks or [(0, 0, 0, 0)]),
+            "    };",
+            f"    static const uint16_t AR[{alternative_count}] = "
+            f"{{ {values(gate['alternative_rules'])} }};",
+            f"    static const uint8_t AL[{alternative_count}] = "
+            f"{{ {values(gate['alternative_seed_lengths'])} }};",
+            f"    static const uint16_t AW[{alternative_count}] = "
+            f"{{ {values(gate['alternative_seed_offsets'])} }};",
+            f"    static const uint32_t AJ[{len(assertion_offsets)}] = "
+            f"{{ {values(assertion_offsets)} }};",
+            f"    static const int8_t AT[{max(1, len(assertion_tokens))}] = "
+            f"{{ {values(assertion_tokens)} }};",
+            f"    static const uint16_t AZ["
+            f"{max(1, len(assertion_positions))}] = "
+            f"{{ {values(assertion_positions)} }};",
+            f"    static const uint64_t RM[{mask_words}] = "
+            f"{{ {values(gate['contextual_rule_mask'])} }};",
+        ]
+        refinement_locals = [
+            "    uint64_t proof[PROOF_WORDS] = {0};",
+            "    int refine_context = collect_context && len >= REFINE_MIN_LEN;",
+        ]
+        refinement_update = proof_update_lines("next", "i")
+        refinement_eof_update = proof_update_lines("256", "len - 1u")
+        refinement_finish = [
+            "    if (refine_context) {",
+            f"        uint64_t feasible[{mask_words}] = {{0}};",
+            "        for (uint16_t alternative = 0;",
+            "             alternative < PROOF_ALT_COUNT; ++alternative) {",
+            "            if (!(proof[alternative >> 6] &",
+            "                  (UINT64_C(1) << (alternative & 63)))) continue;",
+            "            int possible = 1;",
+            "            for (uint32_t item = AP[alternative];",
+            "                 item < AP[alternative + 1u]; ++item) {",
+            "                const uint64_t *requirement = AM[AX[item]];",
+            "                uint64_t seen = 0;",
+            "                for (size_t word = 0; word < 4; ++word)",
+            "                    seen |= observed_bytes[word] & requirement[word];",
+            "                if (!seen) { possible = 0; break; }",
+            "            }",
+            "            if (possible) {",
+            "                uint16_t rule = AR[alternative];",
+            "                feasible[rule >> 6] |=",
+            "                    UINT64_C(1) << (rule & 63);",
+            "            }",
+            "        }",
+            f"        for (size_t word = 0; word < {mask_words}; ++word)",
+            "            observed_context[word] =",
+            "                (observed_context[word] & ~RM[word]) | feasible[word];",
+            "    }",
+        ]
+
+    def segmented_step_lines(lane, index_expression, indent):
+        state = f"segment_state_{lane}"
+        nested = indent + "    "
+        lines = [
+            f"{indent}{{",
+            f"{nested}size_t i = {index_expression};",
+            f"{nested}uint8_t raw = data[i];",
+            "#if defined(LUMINA_ENABLE_EXPERIMENTAL_SEGMENT_LOCAL_ACCUMULATORS)",
+            f"{nested}segment_observed_bytes[{lane}][raw >> 6] |=",
+            f"{nested}    UINT64_C(1) << (raw & 63);",
+            "#else",
+            f"{nested}observed_bytes[raw >> 6] |=",
+            f"{nested}    UINT64_C(1) << (raw & 63);",
+            "#endif",
+            f"{nested}uint8_t folded = raw;",
+            f"{nested}if (folded >= 'A' && folded <= 'Z')",
+            f"{nested}    folded |= 0x20u;",
+            f"{nested}{state} = T[(size_t){state} *",
+            f"{nested}    CLASS_COUNT + C[folded]];",
+            f"{nested}if (collect_shared) {{",
+            f"{nested}    uint16_t output = S[{state}];",
+            f"{nested}    if (output != 0) {{",
+            f"{nested}        for (size_t word = 0; word < {mask_words};",
+            f"{nested}             ++word)",
+            "#if defined(LUMINA_ENABLE_EXPERIMENTAL_SEGMENT_LOCAL_ACCUMULATORS)",
+            f"{nested}            segment_observed_shared[{lane}][word] |=",
+            f"{nested}                O[output][word];",
+            "#else",
+            f"{nested}            observed_shared[word] |=",
+            f"{nested}                O[output][word];",
+            "#endif",
+            f"{nested}    }}",
+            f"{nested}}}",
+            f"{nested}if (collect_context && i + 1u < len) {{",
+            f"{nested}    uint16_t row = R[{state}];",
+            f"{nested}    if (row != 0) {{",
+            f"{nested}        uint8_t next = data[i + 1u];",
+            f"{nested}        if (next >= 'A' && next <= 'Z')",
+            f"{nested}            next |= 0x20u;",
+            f"{nested}        uint16_t output = N[row][next];",
+            f"{nested}        if (output != 0) {{",
+            f"{nested}            for (size_t word = 0; word < {mask_words};",
+            f"{nested}                 ++word)",
+            "#if defined(LUMINA_ENABLE_EXPERIMENTAL_SEGMENT_LOCAL_ACCUMULATORS)",
+            f"{nested}                segment_observed_context[{lane}][word] |=",
+            f"{nested}                    O[output][word];",
+            "#else",
+            f"{nested}                observed_context[word] |=",
+            f"{nested}                    O[output][word];",
+            "#endif",
+            f"{nested}        }}",
+        ]
+        if alternative_count:
+            lines.extend(proof_update_lines(
+                "next", "i", indent=nested + "        "))
+        lines.extend([
+            f"{nested}    }}",
+            f"{nested}}}",
+            f"{indent}}}",
+        ])
+        return lines
+
+    segmented_scan = [
+        f"    enum {{ SEGMENT_MIN_LEN = 4096, "
+        f"MAX_SEED_LENGTH = {gate['max_pattern_length']} }};",
+        "    if (len >= SEGMENT_MIN_LEN &&",
+        "        (collect_shared || collect_context)) {",
+        "        const size_t overlap = MAX_SEED_LENGTH - 1u;",
+        "        const size_t boundary_1 = len / 4u;",
+        "        const size_t boundary_2 = len / 2u;",
+        "        const size_t boundary_3 = (len / 4u) * 3u;",
+        "        const size_t segment_span = boundary_1;",
+        "        uint16_t segment_state_0 = 0;",
+        "        uint16_t segment_state_1 = 0;",
+        "        uint16_t segment_state_2 = 0;",
+        "        uint16_t segment_state_3 = 0;",
+        "#if defined(LUMINA_ENABLE_EXPERIMENTAL_SEGMENT_LOCAL_ACCUMULATORS)",
+        "        uint64_t segment_observed_bytes[4][4] = {{0}};",
+        f"        uint64_t segment_observed_shared[4][{mask_words}] = {{{{0}}}};",
+        f"        uint64_t segment_observed_context[4][{mask_words}] = {{{{0}}}};",
+        "#endif",
+        "        for (size_t warm = 0; warm < overlap; ++warm) {",
+        *segmented_step_lines(
+            1, "boundary_1 - overlap + warm", "            "),
+        *segmented_step_lines(
+            2, "boundary_2 - overlap + warm", "            "),
+        *segmented_step_lines(
+            3, "boundary_3 - overlap + warm", "            "),
+        "        }",
+        "        for (size_t step = 0; step < segment_span; ++step) {",
+        *segmented_step_lines(0, "step", "            "),
+        *segmented_step_lines(1, "boundary_1 + step", "            "),
+        *segmented_step_lines(2, "boundary_2 + step", "            "),
+        *segmented_step_lines(3, "boundary_3 + step", "            "),
+        "        }",
+        "        for (size_t tail = boundary_3 + segment_span;",
+        "             tail < len; ++tail)",
+        *segmented_step_lines(3, "tail", "            "),
+        "#if defined(LUMINA_ENABLE_EXPERIMENTAL_SEGMENT_LOCAL_ACCUMULATORS)",
+        "        for (size_t lane = 0; lane < 4; ++lane) {",
+        "            for (size_t word = 0; word < 4; ++word)",
+        "                observed_bytes[word] |=",
+        "                    segment_observed_bytes[lane][word];",
+        f"            for (size_t word = 0; word < {mask_words}; ++word) {{",
+        "                observed_shared[word] |=",
+        "                    segment_observed_shared[lane][word];",
+        "                observed_context[word] |=",
+        "                    segment_observed_context[lane][word];",
+        "            }",
+        "        }",
+        "#endif",
+        "        state = segment_state_3;",
+        "        goto lumina_seed_ac_scan_complete;",
+        "    }",
+    ]
+
+    lines = [
+        f"void {function_name}(",
+        "        uint64_t *observed_bytes, uint64_t *observed_shared,",
+        "        uint64_t *observed_context, const unsigned char *data,",
+        "        size_t len, int collect_shared, int collect_context) {",
+        f"    enum {{ CLASS_COUNT = {gate['class_count']} }};",
+        f"    static const uint8_t C[256] = {{ {values(gate['byte_classes'])} }};",
+        f"    static const uint16_t T[{len(gate['transitions'])}] = "
+        f"{{ {values(gate['transitions'])} }};",
+        f"    static const uint16_t S[{len(gate['shared_classes'])}] = "
+        f"{{ {values(gate['shared_classes'])} }};",
+        f"    static const uint16_t R[{len(gate['context_rows'])}] = "
+        f"{{ {values(gate['context_rows'])} }};",
+        f"    static const uint16_t N[{len(gate['next_rows'])}]"
+        f"[{gate['context_width']}] = {{",
+        *("    {" + values(row) + "}," for row in gate['next_rows']),
+        "    };",
+        f"    static const uint64_t O[{len(gate['output_classes'])}]"
+        f"[{mask_words}] = {{",
+        word_rows(gate['output_classes']),
+        "    };",
+        *refinement_declarations,
+        "    uint16_t state = 0;",
+        *refinement_locals,
+        *segmented_scan,
+        "    for (size_t i = 0; i < len; ++i) {",
+        "        uint8_t raw = data[i];",
+        "        observed_bytes[raw >> 6] |= UINT64_C(1) << (raw & 63);",
+        "        if (!collect_shared && !collect_context) continue;",
+        "        uint8_t folded = raw;",
+        "        if (folded >= 'A' && folded <= 'Z') folded |= 0x20u;",
+        "        state = T[(size_t)state * CLASS_COUNT + C[folded]];",
+        "        if (collect_shared) {",
+        "            uint16_t output = S[state];",
+        "            if (output != 0) {",
+        f"                for (size_t word = 0; word < {mask_words}; ++word)",
+        "                    observed_shared[word] |= O[output][word];",
+        "            }",
+        "        }",
+        "        if (collect_context && i + 1 < len) {",
+        "            uint16_t row = R[state];",
+        "            if (row != 0) {",
+        "                uint8_t next = data[i + 1];",
+        "                if (next >= 'A' && next <= 'Z') next |= 0x20u;",
+        "                uint16_t output = N[row][next];",
+        "                if (output != 0) {",
+        f"                    for (size_t word = 0; word < {mask_words}; ++word)",
+        "                        observed_context[word] |= O[output][word];",
+        "                }",
+        *refinement_update,
+        "            }",
+        "        }",
+        "    }",
+        "lumina_seed_ac_scan_complete:",
+        *([
+            "    if (collect_context && len != 0) {",
+            "        uint16_t row = R[state];",
+            "        if (row != 0) {",
+            "            uint16_t output = N[row][256];",
+            "            if (output != 0) {",
+            f"                for (size_t word = 0; word < {mask_words}; ++word)",
+            "                    observed_context[word] |= O[output][word];",
+            "            }",
+            *refinement_eof_update,
+            "        }",
+            "    }",
+        ] if gate['context_width'] == 257 else []),
+        *refinement_finish,
+        "}",
+    ]
+    return '\n'.join(lines)
+
+
 def first_byte_mask_is_dense(mask):
     """Return true when every byte routes to at least one generated rule."""
     return all(any(words) for words in mask)
+
+
+def dfa_viable_prefix_pairs(pattern, state_budget=65535):
+    """Return two-byte prefixes that can keep an exact DFA matcher alive.
+
+    The result is a conservative routing certificate, not a match decision.
+    Every valid starting context is considered: start-of-value, and non-start
+    offsets preceded by either a word or non-word byte. A pair is retained when
+    the DFA can accept before consuming either byte or remains non-dead after
+    both bytes. Rules without an absorbing dead state are not eligible.
+    """
+    ast, ignore_case, dot_all = parse_regex_ast(pattern)
+    dfa = compile_dfa_ast(
+        ast, ignore_case, dot_all, state_budget=state_budget)
+    dead = dfa['dead_state']
+    if dead < 0:
+        return None
+
+    byte_class = dfa['byte_class']
+    class_count = dfa['class_count']
+    transitions = dfa['transitions']
+    accepts = dfa['accepts']
+    contexts = (
+        (False, True),   # offset zero
+        (False, False),  # non-word predecessor
+        (True, False),   # word predecessor
+    )
+    viable = set()
+    for first in range(256):
+        first_word = (
+            ord('0') <= first <= ord('9') or
+            ord('A') <= first <= ord('Z') or
+            ord('a') <= first <= ord('z') or
+            first == ord('_')
+        )
+        for second in range(256):
+            pair = (first << 8) | second
+            for previous_word, bol in contexts:
+                symbol = (
+                    byte_class[first] +
+                    class_count * (int(previous_word) + 2 * int(bol))
+                )
+                if accepts[0][symbol]:
+                    viable.add(pair)
+                    break
+                state = transitions[0][symbol]
+                if state == dead:
+                    continue
+                symbol = (
+                    byte_class[second] +
+                    class_count * int(first_word)
+                )
+                if accepts[state][symbol]:
+                    viable.add(pair)
+                    break
+                if transitions[state][symbol] != dead:
+                    viable.add(pair)
+                    break
+    if len(viable) == 65536:
+        return None
+    return frozenset(viable)
 
 
 def transform_requires_offset_zero(transforms):
@@ -1699,6 +2946,244 @@ def gen_phrase_scanner(name, literals):
     lines.append("    return 0;")
     lines.append("}")
     return "\n".join(lines), safe
+
+
+SHARED_EXACT_PHRASE_ROUTER_IDS = frozenset({'933150', '944130'})
+
+
+def shared_exact_phrase_router_plan(rule):
+    """Return exact positive phrase stages suitable for one shared value scan."""
+    if str(rule.get('id')) not in SHARED_EXACT_PHRASE_ROUTER_IDS:
+        return None
+    if not _only_none_transforms(rule):
+        return None
+
+    stages = []
+    members = rule.get('_chain_members')
+    if members:
+        if rule.get('_regex_backend') != 'phrase-same-buffer-chain':
+            return None
+        head_literals = rule.get('_shared_seed_literals') or []
+        if not head_literals:
+            return None
+        stages.append(list(head_literals))
+        for member in members[1:]:
+            if (member.get('operator') != '@pm' or member.get('negated') or
+                    not _only_none_transforms(member)):
+                return None
+            literals = [phrase for phrase in member.get('pattern', '').split()
+                        if phrase]
+            if not literals:
+                return None
+            stages.append(literals)
+    elif rule.get('operator') in ('@pm', '@pmFromFile'):
+        literals = rule.get('_shared_seed_literals') or []
+        if not literals:
+            return None
+        stages.append(list(literals))
+    else:
+        return None
+
+    collections = {binding.collection for binding in rule.get('bindings', [])
+                   if not binding.excluded}
+    return {
+        'stages': stages,
+        'xml_aware': 'XML' in collections,
+    }
+
+
+def emit_shared_exact_phrase_ac_router(group, router_id):
+    """Emit a class-compressed dense Aho-Corasick DFA for exact phrases."""
+    if len(group) < 2 or len(group) > 8:
+        raise ValueError("shared exact phrase AC router requires 2..8 rules")
+
+    stage_count = sum(len(plan['stages']) for _, plan in group)
+    if stage_count > 64:
+        raise ValueError("shared exact phrase AC router exceeds 64 stages")
+
+    rule_required = []
+    patterns = {}
+    next_stage = 0
+    for _, plan in group:
+        required = 0
+        for literals in plan['stages']:
+            stage_bit = 1 << next_stage
+            next_stage += 1
+            required |= stage_bit
+            for literal in literals:
+                encoded = literal.encode('utf-8', 'replace')
+                if not encoded:
+                    continue
+                key = bytes((byte | 32) & 0xff for byte in encoded)
+                patterns[key] = patterns.get(key, 0) | stage_bit
+        rule_required.append(required)
+
+    children = [{}]
+    outputs = [0]
+    for pattern, output in sorted(patterns.items()):
+        state = 0
+        for byte in pattern:
+            next_state = children[state].get(byte)
+            if next_state is None:
+                next_state = len(children)
+                children[state][byte] = next_state
+                children.append({})
+                outputs.append(0)
+            state = next_state
+        outputs[state] |= output
+
+    fail = [0] * len(children)
+    queue = []
+    for state in children[0].values():
+        queue.append(state)
+    queue_pos = 0
+    while queue_pos < len(queue):
+        state = queue[queue_pos]
+        queue_pos += 1
+        for byte, next_state in children[state].items():
+            fallback = fail[state]
+            while fallback and byte not in children[fallback]:
+                fallback = fail[fallback]
+            fail[next_state] = children[fallback].get(byte, 0)
+            outputs[next_state] |= outputs[fail[next_state]]
+            queue.append(next_state)
+
+    alphabet = sorted({byte for pattern in patterns for byte in pattern})
+    byte_class = [0] * 256
+    for class_id, byte in enumerate(alphabet, start=1):
+        byte_class[byte] = class_id
+    class_count = len(alphabet) + 1
+
+    transitions = [0] * (len(children) * class_count)
+    state_order = [0] + queue
+    for state in state_order:
+        for class_id, byte in enumerate(alphabet, start=1):
+            next_state = children[state].get(byte)
+            if next_state is None and state:
+                next_state = transitions[fail[state] * class_count + class_id]
+            transitions[state * class_count + class_id] = next_state or 0
+
+    if len(children) > 65535:
+        raise ValueError("shared exact phrase AC router exceeds uint16_t states")
+
+    def emit_values(values):
+        return ', '.join(str(value) for value in values) if values else '0'
+
+    def emit_u64(values):
+        return ', '.join(f'UINT64_C({value})' for value in values)
+
+    all_rule_mask = (1 << len(group)) - 1
+    prefix = f"lumina_shared_call_router_{router_id}"
+    lines = [
+        *(
+            f"extern int lumina_scan_rule_{rule['id']}("
+            "const unsigned char*,size_t,size_t);"
+            for rule, _ in group
+        ),
+        f"static inline int {prefix}_looks_xml("
+        "const unsigned char *data, size_t len, size_t offset) {",
+        "    size_t pos = offset;",
+        "    while (pos < len && (data[pos] == ' ' || data[pos] == '\\t' ||",
+        "           data[pos] == '\\r' || data[pos] == '\\n')) ++pos;",
+        "    return pos + 5 <= len && data[pos] == '<' && data[pos + 1] == '?' &&",
+        "           (data[pos + 2] | 32) == 'x' &&",
+        "           (data[pos + 3] | 32) == 'm' &&",
+        "           (data[pos + 4] | 32) == 'l';",
+        "}",
+        f"uint64_t {prefix}_match(const unsigned char *data, size_t len,",
+        "        size_t offset, uint64_t wanted_mask) {",
+        f"    enum {{ CLASS_COUNT = {class_count} }};",
+        f"    static const uint8_t C[256] = {{ {emit_values(byte_class)} }};",
+        f"    static const uint16_t T[{len(transitions)}] = "
+        f"{{ {emit_values(transitions)} }};",
+        f"    static const uint64_t O[{len(outputs)}] = "
+        f"{{ {emit_u64(outputs)} }};",
+        "    uint64_t hits = 0;",
+        f"    wanted_mask &= UINT64_C({all_rule_mask});",
+        "    if (offset >= len || wanted_mask == 0) return 0;",
+        f"    if ({prefix}_looks_xml(data, len, offset)) {{",
+    ]
+    for local_index, (rule, plan) in enumerate(group):
+        if plan['xml_aware']:
+            lines.extend([
+                f"        if ((wanted_mask & (UINT64_C(1) << {local_index})) &&",
+                f"            lumina_scan_rule_{rule['id']}(data, len, offset))",
+                f"            hits |= UINT64_C(1) << {local_index};",
+                f"        wanted_mask &= ~(UINT64_C(1) << {local_index});",
+            ])
+    lines.extend([
+        "        if (wanted_mask == 0) return hits;",
+        "    }",
+        "    uint64_t wanted_stages = 0;",
+    ])
+    for local_index, required in enumerate(rule_required):
+        lines.append(
+            f"    if (wanted_mask & (UINT64_C(1) << {local_index})) "
+            f"wanted_stages |= UINT64_C({required});")
+    lines.extend([
+        "    uint64_t stage_hits = 0;",
+        "    uint16_t state = 0;",
+        "    for (size_t i = offset; i < len; ++i) {",
+        "        uint8_t folded = data[i] | 32;",
+        "        state = T[(size_t)state * CLASS_COUNT + C[folded]];",
+        "        stage_hits |= O[state] & wanted_stages;",
+    ])
+    for local_index, required in enumerate(rule_required):
+        lines.extend([
+            f"        if ((wanted_mask & (UINT64_C(1) << {local_index})) &&",
+            f"            (stage_hits & UINT64_C({required})) == UINT64_C({required}))",
+            f"            hits |= UINT64_C(1) << {local_index};",
+        ])
+    lines.extend([
+        "        if ((hits & wanted_mask) == wanted_mask) return hits;",
+        "    }",
+        "    return hits;",
+        "}",
+    ])
+    return '\n'.join(lines), len(patterns), stage_count
+
+
+def lower_shared_exact_phrase_routers(detection, start_router):
+    """Attach profile-selected exact phrase rules to one shared pos0 router."""
+    candidates = []
+    for rule in detection:
+        if '_shared_router' in rule:
+            continue
+        plan = shared_exact_phrase_router_plan(rule)
+        if plan is not None:
+            candidates.append((rule, plan))
+
+    stats = {
+        'routers': 0,
+        'rules': 0,
+        'literals': 0,
+        'stages': 0,
+        'sources': [],
+        'next_router': start_router,
+    }
+    if len(candidates) < 2:
+        return stats
+
+    for group_start in range(0, len(candidates), 8):
+        group = candidates[group_start:group_start + 8]
+        if len(group) < 2:
+            continue
+        router_id = stats['next_router']
+        router_code, literal_count, stage_count = (
+            emit_shared_exact_phrase_ac_router(group, router_id))
+        stats['sources'].append(router_code)
+        for local_index, (rule, _) in enumerate(group):
+            rule['_force_pos0'] = True
+            rule['_shared_router'] = router_id
+            rule['_shared_router_bit'] = local_index
+            rule['_shared_router_repetitive_fallback'] = True
+            rule['_regex_backend'] = 'shared-exact-phrase-router'
+        stats['routers'] += 1
+        stats['rules'] += len(group)
+        stats['literals'] += literal_count
+        stats['stages'] += stage_count
+        stats['next_router'] += 1
+    return stats
 
 # ---------------------------------------------------------------------------
 # K4 Phase-1 native scalar / phrase / scanner-bridge emitters
@@ -4210,6 +5695,60 @@ def emit_recursive_factored_concat_dfa(rule_id, pattern, state_budget=8192,
                 break
         return result
 
+    def consuming_values(op, value):
+        name = getattr(op, 'name', str(op))
+        if name == 'LITERAL':
+            return add_case_variants({value})
+        if name == 'NOT_LITERAL':
+            return set(range(256)) - add_case_variants({value})
+        if name == 'IN':
+            words = build_bitmask_for_in(value, ignore_case)
+            return {
+                byte for byte in range(256)
+                if words[byte >> 6] & (1 << (byte & 63))
+            }
+        if name == 'ANY':
+            # Newline over-inclusion is safe for a routing predicate.
+            return set(range(256))
+        return None
+
+    def first_bytes_and_nullable(nodes):
+        """Return exact first bytes only for AST shapes proven understood."""
+        result = set()
+        for op, value in nodes:
+            name = getattr(op, 'name', str(op))
+            direct = consuming_values(op, value)
+            if direct is not None:
+                result.update(direct)
+                return result, False, True
+            if name == 'AT':
+                continue
+            if name == 'SUBPATTERN':
+                values, nullable, exact = first_bytes_and_nullable(value[-1])
+            elif name == 'BRANCH':
+                values = set()
+                nullable = False
+                exact = True
+                for branch in value[1]:
+                    branch_values, branch_nullable, branch_exact = (
+                        first_bytes_and_nullable(branch))
+                    values.update(branch_values)
+                    nullable = nullable or branch_nullable
+                    exact = exact and branch_exact
+            elif name in ('MAX_REPEAT', 'MIN_REPEAT', 'POSSESSIVE_REPEAT'):
+                minimum, _, child = value
+                values, child_nullable, exact = first_bytes_and_nullable(child)
+                nullable = minimum == 0 or child_nullable
+            else:
+                return set(range(256)), True, False
+            result.update(values)
+            if not exact:
+                return set(range(256)), True, False
+            if nullable:
+                continue
+            return result, False, True
+        return result, True, True
+
     candidate_sets = fixed_prefix_sets(ast.data)
     if not candidate_sets:
         candidate_sets = [set(first_bytes_of(pattern))]
@@ -4253,13 +5792,41 @@ def emit_recursive_factored_concat_dfa(rule_id, pattern, state_budget=8192,
             trailing = build(nodes[split + 1:], continuation)
             entries = [build(branch, trailing) for branch in branches]
             dispatcher = next_name('dispatch')
-            calls = ''.join(
-                f"    if ({entry}(data, len, offset)) return 1;\n"
-                for entry in entries
-            )
+            route_masks = []
+            calls = []
+            for branch, entry in zip(branches, entries):
+                values, nullable, exact = first_bytes_and_nullable(branch)
+                if exact and not nullable and 0 < len(values) < 256:
+                    words = [0, 0, 0, 0]
+                    for byte in values:
+                        words[byte >> 6] |= 1 << (byte & 63)
+                    route_index = len(route_masks)
+                    route_masks.append(words)
+                    calls.append(
+                        f"    if (offset < len && "
+                        f"({dispatcher}_route_mask[{route_index}]"
+                        f"[data[offset] >> 6] & "
+                        f"(1ULL << (data[offset] & 63))) && "
+                        f"{entry}(data, len, offset)) return 1;\n"
+                    )
+                else:
+                    calls.append(
+                        f"    if ({entry}(data, len, offset)) return 1;\n")
+            if route_masks:
+                mask_rows = ',\n'.join(
+                    '    {' + ', '.join(
+                        f'0x{word:016x}ULL' for word in words) + '}'
+                    for words in route_masks
+                )
+                code.append(
+                    f"static const uint64_t {dispatcher}_route_mask"
+                    f"[{len(route_masks)}][4] = {{\n"
+                    f"{mask_rows}\n"
+                    f"}};\n"
+                )
             code.append(
                 f"static int {dispatcher}(const unsigned char *data, size_t len, size_t offset) {{\n"
-                + calls +
+                + ''.join(calls) +
                 f"    return 0;\n"
                 f"}}\n"
             )
@@ -4416,6 +5983,40 @@ def emit_top_level_alternative_dfa_router(rule_id, pattern, state_budget=8192,
                 break
         return result
 
+    def fixed_prefix_alternatives(nodes, limit=4, expansion_cap=32):
+        """Return correlated literal prefixes shared by every branch path.
+
+        Unlike per-position byte sets, each emitted prefix retains byte
+        correlation. Unsupported syntax stops prefix growth but does not
+        invalidate an already proven leading literal.
+        """
+        language = [b'']
+        for op, value in nodes:
+            name = getattr(op, 'name', str(op))
+            if name == 'AT':
+                continue
+            try:
+                alternatives = finite_literal_language(
+                    [(op, value)],
+                    expansion_cap=expansion_cap,
+                    repeat_cap=4,
+                )
+            except DfaUnsupportedRegex:
+                break
+            combined = {
+                (left + right)[:limit]
+                for left in language
+                for right in alternatives
+            }
+            if not combined or len(combined) > expansion_cap:
+                break
+            language = sorted(combined)
+            if all(len(prefix_value) >= limit for prefix_value in language):
+                break
+        if not language or any(len(prefix_value) < 2 for prefix_value in language):
+            return ()
+        return tuple(language)
+
     def conservative_table_bytes(dfa):
         transition_width = 2 if dfa['state_count'] <= 65535 else 4
         return (dfa['state_count'] * dfa['symbol_count'] * transition_width +
@@ -4441,16 +6042,21 @@ def emit_top_level_alternative_dfa_router(rule_id, pattern, state_budget=8192,
         prefix_sets = fixed_prefix_sets(branch)
         if not prefix_sets:
             prefix_sets = [first_bytes]
-        plans.append((branch_index, branch_ast, dfa, first_bytes, prefix_sets))
+        prefix_alternatives = (
+            fixed_prefix_alternatives(branch) if not ignore_case else ())
+        plans.append((
+            branch_index, branch_ast, dfa, first_bytes, prefix_sets,
+            prefix_alternatives,
+        ))
 
     prefix = f'lumina_alt_{rule_id}'
     code = []
     route = [0] * 256
-    for branch_index, _, _, first_bytes, _ in plans:
+    for branch_index, _, _, first_bytes, _, _ in plans:
         for byte in first_bytes:
             route[byte] |= 1 << branch_index
 
-    for branch_index, branch_ast, dfa, _, _ in plans:
+    for branch_index, branch_ast, dfa, _, _, _ in plans:
         code.append(emit_dfa_c(
             rule_id, None,
             state_budget=state_budget,
@@ -4481,8 +6087,81 @@ def emit_top_level_alternative_dfa_router(rule_id, pattern, state_budget=8192,
         f'}};\n'
     )
 
+    active_route_bytes = [
+        byte for byte, pending in enumerate(route) if pending != 0
+    ]
+    active_high_nibbles = sorted({byte >> 4 for byte in active_route_bytes})
+    teddy_enabled = (
+        0 < len(active_route_bytes) < 256 and
+        len(active_high_nibbles) <= 8
+    )
+    if teddy_enabled:
+        high_bit = {
+            nibble: 1 << index
+            for index, nibble in enumerate(active_high_nibbles)
+        }
+        low_nibble_table = [0] * 16
+        high_nibble_table = [0] * 16
+        for nibble, bit in high_bit.items():
+            high_nibble_table[nibble] = bit
+        for byte in active_route_bytes:
+            low_nibble_table[byte & 0x0f] |= high_bit[byte >> 4]
+        low_rows = ', '.join(f'0x{value:02x}u' for value in low_nibble_table)
+        high_rows = ', '.join(f'0x{value:02x}u' for value in high_nibble_table)
+        code.append(
+            '#if defined(__AVX2__)\n'
+            '#include <immintrin.h>\n'
+            '#elif defined(__aarch64__)\n'
+            '#include <arm_neon.h>\n'
+            '#endif\n'
+            f'static const unsigned char {prefix}_teddy_low[16] = {{\n'
+            f'    {low_rows}\n'
+            f'}};\n'
+            f'static const unsigned char {prefix}_teddy_high[16] = {{\n'
+            f'    {high_rows}\n'
+            f'}};\n'
+            f'static inline uint32_t {prefix}_candidate_mask('
+            'const unsigned char *data) {\n'
+            '#if defined(__AVX2__)\n'
+            '    const __m256i input = _mm256_loadu_si256((const __m256i *)data);\n'
+            '    const __m256i nibble_mask = _mm256_set1_epi8(0x0f);\n'
+            '    const __m256i low = _mm256_and_si256(input, nibble_mask);\n'
+            '    const __m256i high = _mm256_and_si256(\n'
+            '        _mm256_srli_epi16(input, 4), nibble_mask);\n'
+            '    const __m256i low_table = _mm256_broadcastsi128_si256(\n'
+            f'        _mm_loadu_si128((const __m128i *){prefix}_teddy_low));\n'
+            '    const __m256i high_table = _mm256_broadcastsi128_si256(\n'
+            f'        _mm_loadu_si128((const __m128i *){prefix}_teddy_high));\n'
+            '    const __m256i candidates = _mm256_and_si256(\n'
+            '        _mm256_shuffle_epi8(low_table, low),\n'
+            '        _mm256_shuffle_epi8(high_table, high));\n'
+            '    const __m256i zero = _mm256_setzero_si256();\n'
+            '    return ~((uint32_t)_mm256_movemask_epi8(\n'
+            '        _mm256_cmpeq_epi8(candidates, zero)));\n'
+            '#elif defined(__aarch64__)\n'
+            '    const uint8x16_t input = vld1q_u8(data);\n'
+            '    const uint8x16_t nibble_mask = vdupq_n_u8(0x0f);\n'
+            '    const uint8x16_t low = vandq_u8(input, nibble_mask);\n'
+            '    const uint8x16_t high = vshrq_n_u8(input, 4);\n'
+            '    const uint8x16_t candidates = vandq_u8(\n'
+            f'        vqtbl1q_u8(vld1q_u8({prefix}_teddy_low), low),\n'
+            f'        vqtbl1q_u8(vld1q_u8({prefix}_teddy_high), high));\n'
+            '    unsigned char lanes[16];\n'
+            '    uint32_t mask = 0;\n'
+            '    vst1q_u8(lanes, candidates);\n'
+            '    for (unsigned lane = 0; lane < 16u; ++lane)\n'
+            '        mask |= (uint32_t)(lanes[lane] != 0) << lane;\n'
+            '    return mask;\n'
+            '#else\n'
+            '    (void)data;\n'
+            '    return 0;\n'
+            '#endif\n'
+            '}\n'
+        )
+
+    branch_checks = {}
     cases = []
-    for branch_index, _, _, _, prefix_sets in plans:
+    for branch_index, _, _, _, prefix_sets, prefix_alternatives in plans:
         guards = []
         usable_prefix = 1
         for position, values in enumerate(prefix_sets[1:], start=1):
@@ -4499,17 +6178,76 @@ def emit_top_level_alternative_dfa_router(rule_id, pattern, state_budget=8192,
             condition = (
                 f'candidate + {usable_prefix}u <= len && ' +
                 ' && '.join(guards) + ' && ')
+        exact_call = (
+            f'{prefix}_shard_{branch_index}(data, len, candidate)')
+        legacy_check = (
+            f'if ({condition}{exact_call}) return {rule_id};')
+        if prefix_alternatives:
+            alternative_guards = []
+            for prefix_value in prefix_alternatives:
+                comparisons = ' && '.join(
+                    f'data[candidate + {position}] == 0x{byte:02x}u'
+                    for position, byte in enumerate(prefix_value)
+                )
+                alternative_guards.append(
+                    f'(candidate + {len(prefix_value)}u <= len && '
+                    f'{comparisons})')
+            correlated = ' || '.join(alternative_guards)
+            branch_checks[branch_index] = (
+                '#if !defined(LUMINA_DISABLE_ALTERNATIVE_CORRELATED_PREFIX_GUARDS)\n'
+                f'if (({correlated}) && {exact_call}) return {rule_id};\n'
+                '#else\n'
+                f'{legacy_check}\n'
+                '#endif'
+            )
+        else:
+            branch_checks[branch_index] = legacy_check
         cases.append(
             f'            case {branch_index}u:\n'
-            f'                if ({condition}{prefix}_shard_{branch_index}('
-            f'data, len, candidate)) return {rule_id};\n'
+            f'                {branch_checks[branch_index]}\n'
             f'                break;'
         )
 
+    route_class_by_mask = {}
+    route_classes = [0] * 256
+    for byte, pending in enumerate(route):
+        if pending == 0:
+            continue
+        if pending not in route_class_by_mask:
+            route_class_by_mask[pending] = len(route_class_by_mask) + 1
+        route_classes[byte] = route_class_by_mask[pending]
+    route_class_rows = '\n'.join(
+        '    ' + ','.join(
+            f'{value}u' for value in route_classes[index:index + 16]) + ','
+        for index in range(0, 256, 16)
+    )
     code.append(
-        f'int lumina_scan_rule_{rule_id}(const unsigned char *data, size_t len, size_t offset) {{\n'
-        f'    if (offset >= len) return 0;\n'
-        f'    for (size_t candidate = offset; candidate < len; ++candidate) {{\n'
+        f'static const unsigned char {prefix}_route_class[256] = {{\n'
+        f'{route_class_rows}\n'
+        f'}};\n'
+    )
+    route_class_cases = []
+    for pending, route_class in route_class_by_mask.items():
+        checks = [
+            f'            {branch_checks[branch_index]}'
+            for branch_index in range(len(plans))
+            if pending & (1 << branch_index)
+        ]
+        route_class_cases.append(
+            f'        case {route_class}u:\n' +
+            '\n'.join(checks) +
+            '\n            break;'
+        )
+
+    code.append(
+        f'static inline int {prefix}_try_candidate('
+        f'const unsigned char *data, size_t len, size_t candidate) {{\n'
+        f'#if !defined(LUMINA_DISABLE_ALTERNATIVE_ROUTE_CLASSES)\n'
+        f'    switch ({prefix}_route_class[data[candidate]]) {{\n' +
+        '\n'.join(route_class_cases) +
+        f'\n        default: break;\n'
+        f'    }}\n'
+        f'#else\n'
         f'        {route_type} pending = {prefix}_route[data[candidate]];\n'
         f'        while (pending) {{\n'
         f'            unsigned shard = (unsigned)__builtin_ctzll((unsigned long long)pending);\n'
@@ -4519,6 +6257,36 @@ def emit_top_level_alternative_dfa_router(rule_id, pattern, state_budget=8192,
         f'\n            default: break;\n'
         f'            }}\n'
         f'        }}\n'
+        f'#endif\n'
+        f'    return 0;\n'
+        f'}}\n'
+        f'int lumina_scan_rule_{rule_id}(const unsigned char *data, size_t len, size_t offset) {{\n'
+        f'    if (offset >= len) return 0;\n'
+        f'    size_t candidate = offset;\n' +
+        (
+            f'#if !defined(LUMINA_DISABLE_ALTERNATIVE_TEDDY_ROUTER) && '
+            f'(defined(__AVX2__) || defined(__aarch64__))\n'
+            f'#if defined(__AVX2__)\n'
+            f'    const size_t block_width = 32u;\n'
+            f'#else\n'
+            f'    const size_t block_width = 16u;\n'
+            f'#endif\n'
+            f'    for (; candidate + block_width <= len; candidate += block_width) {{\n'
+            f'        uint32_t positions = {prefix}_candidate_mask(data + candidate);\n'
+            f'        while (positions) {{\n'
+            f'            unsigned relative = (unsigned)__builtin_ctz(positions);\n'
+            f'            positions &= positions - 1u;\n'
+            f'            int result = {prefix}_try_candidate('
+            f'data, len, candidate + relative);\n'
+            f'            if (result) return result;\n'
+            f'        }}\n'
+            f'    }}\n'
+            f'#endif\n'
+            if teddy_enabled else ''
+        ) +
+        f'    for (; candidate < len; ++candidate) {{\n'
+        f'        int result = {prefix}_try_candidate(data, len, candidate);\n'
+        f'        if (result) return result;\n'
         f'    }}\n'
         f'    return 0;\n'
         f'}}\n'
@@ -5607,6 +7375,9 @@ RUNTIME_COVERED_IDS = {
     '920280',  # &REQUEST_HEADERS:Host @eq 0
     '920620',  # &REQUEST_HEADERS:Content-Type @gt 1
     '920320',  # &REQUEST_HEADERS:User-Agent @eq 0
+    '921250',  # REQUEST_COOKIES selector plus exact value predicate
+    '922120',  # MULTIPART_PART_HEADERS Content-Transfer-Encoding
+    '922130',  # multipart part-header name contains a non-printable byte
 }
 
 # Runtime structural rules may still need translator-owned immutable resources.
@@ -7515,6 +9286,7 @@ def main():
                 f"    (void)data; (void)len; (void)offset; return 0;\n}}\n"
             )
             r['_force_pos0'] = True
+            r['_tx_full_owner'] = True
             r['_regex_backend'] = 'transaction-runtime-dfa'
             detection.append(r)
             continue
@@ -7567,6 +9339,7 @@ def main():
                         "details": str(exc),
                     })
                     continue
+                r['_shared_seed_literals'] = literals
                 r['_force_pos0'] = True
                 r['_regex_backend'] = (
                     'phrase-rx-same-buffer-chain'
@@ -7723,6 +9496,7 @@ def main():
                         table_budget=args.dfa_table_budget,
                     )
                     r['_regex_backend'] = 'compact-prefix-dfa-fixed-suffix'
+                    r['_contextual_seed_plan'] = compact_prefix_plan
                     r['_force_pos0'] = True
                     transform_dag_lowered = True
                     dfa_rules += 1
@@ -7738,41 +9512,66 @@ def main():
                     transform_dag_lowered = True
                     dfa_rules += 1
                 elif transform_requires_offset_zero(r.get('transforms')):
-                    # One typed-value dispatch feeds one candidate-routed DAG.
-                    # This preserves unanchored search after transforms whose
-                    # output has no useful raw first-byte relation.
-                    try:
-                        if not r.get('multimatch'):
-                            raise DfaUnsupportedRegex(
-                                'alternative router reserved for multiMatch views')
-                        fn = emit_top_level_alternative_dfa_router(
-                            r['id'], r['pattern'],
-                            state_budget=args.dfa_factored_state_budget,
-                            table_budget=args.dfa_table_budget,
-                            total_table_budget=args.dfa_factored_total_table_budget,
-                        )
-                        r['_regex_backend'] = 'dfa-transform-alternative-router'
-                        r['_force_pos0'] = True
-                        transform_dag_lowered = True
-                        dfa_rules += 1
-                    except DfaUnsupportedRegex:
+                    # Transforms such as utf8ToUnicode invalidate raw first-byte
+                    # routing, so the matcher receives one complete transformed
+                    # value at offset zero. Prefer one exact search DFA when the
+                    # unanchored language can otherwise keep a candidate shard
+                    # alive across a long benign suffix. The previous candidate
+                    # DAG restarted that tail scan at every plausible byte.
+                    dfa_pattern, is_search_dfa = dfa_search_lowering(r['pattern'])
+                    if is_search_dfa and not r.get('multimatch'):
                         try:
-                            fn = emit_recursive_factored_concat_dfa(
+                            fn = emit_dfa_c(
+                                r['id'], dfa_pattern,
+                                state_budget=args.dfa_state_budget,
+                                table_budget=args.dfa_table_budget,
+                            )
+                            r['_regex_backend'] = 'dfa-transform-search'
+                            r['_force_pos0'] = True
+                            transform_dag_lowered = True
+                            dfa_rules += 1
+                        except DfaUnsupportedRegex:
+                            pass
+                    if not transform_dag_lowered:
+                        # One typed-value dispatch feeds one candidate-routed
+                        # DAG. This preserves unanchored search after transforms
+                        # whose output has no useful raw first-byte relation.
+                        try:
+                            if not r.get('multimatch'):
+                                raise DfaUnsupportedRegex(
+                                    'alternative router reserved for multiMatch views')
+                            fn = emit_top_level_alternative_dfa_router(
                                 r['id'], r['pattern'],
                                 state_budget=args.dfa_factored_state_budget,
                                 table_budget=args.dfa_table_budget,
                                 total_table_budget=args.dfa_factored_total_table_budget,
                             )
-                            r['_regex_backend'] = 'dfa-transform-candidate-dag'
+                            r['_regex_backend'] = 'dfa-transform-alternative-router'
                             r['_force_pos0'] = True
                             transform_dag_lowered = True
                             dfa_rules += 1
                         except DfaUnsupportedRegex:
-                            # Retain the ordinary selective backend when both
-                            # exact candidate routers exceed generated-size caps.
-                            pass
+                            try:
+                                fn = emit_recursive_factored_concat_dfa(
+                                    r['id'], r['pattern'],
+                                    state_budget=args.dfa_factored_state_budget,
+                                    table_budget=args.dfa_table_budget,
+                                    total_table_budget=args.dfa_factored_total_table_budget,
+                                )
+                                r['_regex_backend'] = 'dfa-transform-candidate-dag'
+                                r['_force_pos0'] = True
+                                transform_dag_lowered = True
+                                dfa_rules += 1
+                            except DfaUnsupportedRegex:
+                                # Retain the ordinary selective backend when
+                                # exact transformed search exceeds all caps.
+                                pass
                 if transform_dag_lowered:
                     pass
+                elif percent_hex_pair_search_plan(r['pattern']) is not None:
+                    fn = emit_percent_hex_pair_search(r['id'], r['pattern'])
+                    r['_regex_backend'] = 'percent-hex-pair-search-microkernel'
+                    r['_force_pos0'] = True
                 elif repeated_token_threshold_plan(r['pattern']) is not None:
                     fn = emit_repeated_token_threshold(r['id'], r['pattern'])
                     r['_regex_backend'] = 'repeated-token-threshold-microkernel'
@@ -7783,12 +9582,17 @@ def main():
                 elif r.get('_tx_chain') or requires_dfa(r['pattern']):
                     dfa_pattern, is_search_dfa = dfa_search_lowering(r['pattern'])
                     try:
-                        fn = emit_dfa_c(r['id'], dfa_pattern,
-                                        state_budget=args.dfa_state_budget,
-                                        table_budget=args.dfa_table_budget)
+                        fn = emit_dfa_c(
+                            r['id'], dfa_pattern,
+                            state_budget=args.dfa_state_budget,
+                            table_budget=args.dfa_table_budget,
+                            emit_prefix4_gate=not is_search_dfa,
+                        )
                         r['_regex_backend'] = 'dfa-search' if is_search_dfa else 'dfa'
                         if is_search_dfa:
                             r['_force_pos0'] = True
+                        else:
+                            r['_prefix4_gate_emitted'] = True
                         dfa_rules += 1
                     except DfaUnsupportedRegex as primary_error:
                         recovered_original_dfa = False
@@ -7798,9 +9602,22 @@ def main():
                                     r['id'], r['pattern'],
                                     state_budget=args.dfa_state_budget,
                                     table_budget=args.dfa_table_budget,
+                                    emit_prefix4_gate=True,
                                 )
-                                r['_regex_backend'] = 'dfa-all-offsets'
-                                r['_no_anywhere'] = True
+                                if r.get('transforms') and not r.get('multimatch'):
+                                    # ModSecurity transforms the complete variable
+                                    # before applying unanchored regex search. Keep
+                                    # the exact candidate DFA, but move its offset
+                                    # loop behind one full-value transform so a
+                                    # transform is never rebuilt for every raw byte.
+                                    r['_regex_backend'] = (
+                                        'dfa-transform-all-offset-search')
+                                    r['_force_pos0'] = True
+                                    r['_transform_all_offsets'] = True
+                                else:
+                                    r['_regex_backend'] = 'dfa-all-offsets'
+                                    r['_no_anywhere'] = True
+                                r['_prefix4_gate_emitted'] = True
                                 dfa_rules += 1
                                 recovered_original_dfa = True
                             except DfaUnsupportedRegex:
@@ -7855,12 +9672,15 @@ def main():
                                                 r['id'], dfa_pattern,
                                                 state_budget=args.dfa_compact_state_budget,
                                                 table_budget=args.dfa_table_budget,
+                                                emit_prefix4_gate=not is_search_dfa,
                                             )
                                             r['_regex_backend'] = ('dfa-search-compact-escalated'
                                                                    if is_search_dfa else
                                                                    'dfa-compact-escalated')
                                             if is_search_dfa:
                                                 r['_force_pos0'] = True
+                                            else:
+                                                r['_prefix4_gate_emitted'] = True
                                             dfa_rules += 1
                                         except DfaUnsupportedRegex:
                                             try:
@@ -7899,12 +9719,14 @@ def main():
                 skipped_unhandled += 1
                 continue
             r['_fn'] = emit_inline_pm(r['id'], lits)
+            r['_shared_seed_literals'] = lits
             detection.append(r)
         elif r['operator'] in ('@contains',):
             if not r['id'] or not r['pattern']:
                 skipped_unhandled += 1
                 continue
             r['_fn'] = emit_contains(r['id'], r['pattern'])
+            r['_shared_seed_literals'] = [r['pattern']]
             detection.append(r)
         elif r['operator'] == '@detectXSS':
             if not r['id']:
@@ -7949,6 +9771,7 @@ def main():
             if safe not in pm_scanners:
                 pm_scanners[safe] = (df, lits)
             r['_pm_safe'] = safe
+            r['_shared_seed_literals'] = lits
             r['_fn'] = (
                 f"int lumina_scan_rule_{r['id']}(const unsigned char *data, size_t len, size_t offset) {{\n"
                 f"    if (lumina_pm_{safe}(data + offset, len - offset)) return {r['id']};\n    return 0;\n}}\n"
@@ -7965,6 +9788,7 @@ def main():
                 skipped_unhandled += 1
                 continue
             r['_fn'] = emit_streq(r['id'], r['pattern'])
+            r['_shared_seed_literals'] = [r['pattern']]
             detection.append(r)
         elif r['operator'] == '@within':
             if not r['id']:
@@ -7989,6 +9813,9 @@ def main():
     HPP_SKIP = {'921170'}
     detection = [r for r in detection if r['id'] not in HPP_SKIP]
     shared_call_stats = lower_shared_call_routers(detection)
+    shared_phrase_stats = lower_shared_exact_phrase_routers(
+        detection, shared_call_stats['routers'])
+    shared_router_count = shared_phrase_stats['next_router']
     rule_removal_controls, control_unsupported = collect_rule_removal_controls(
         parsed_rules, detection)
     unsupported_rules.extend(control_unsupported)
@@ -8006,6 +9833,12 @@ def main():
         f"routers={shared_call_stats['routers']} rules={shared_call_stats['rules']} "
         f"words={shared_call_stats['words']} nodes={shared_call_stats['nodes']} "
         f"edges={shared_call_stats['edges']}")
+    print(
+        "[v9] shared exact phrase routers: "
+        f"routers={shared_phrase_stats['routers']} "
+        f"rules={shared_phrase_stats['rules']} "
+        f"literals={shared_phrase_stats['literals']} "
+        f"stages={shared_phrase_stats['stages']}")
 
     # Build routing tables
     n = len(detection)
@@ -8013,6 +9846,12 @@ def main():
     if NWORDS < 2:
         NWORDS = 2
     mask = [[0] * NWORDS for _ in range(256)]
+    transform_search_mask = [[0] * NWORDS for _ in range(256)]
+    transform_search_rules = [0] * NWORDS
+    mandatory_byte_mask = [[0] * NWORDS for _ in range(256)]
+    mandatory_byte_rules = [0] * NWORDS
+    shared_seed_rule_sets = []
+    contextual_seed_rule_plans = []
     scope_entries = []
     collection_entries = []
     cat_entries = []
@@ -8022,6 +9861,7 @@ def main():
     score_entries = []
     rule_id_entries = []
     multimatch_entries = []
+    transform_search_entries = []
     shared_router_entries = []
     table_entries = []
     scope_values = []
@@ -8029,6 +9869,9 @@ def main():
     hdr_values = []
     fn_chunks = []       # list of (chunk_index, code)
     pm_chunk = []
+    prefix2_rule_count = 0
+    prefix4_gate_count = 0
+    alphabet_gate_count = 0
 
     # phrase scanners first
     for safe, (name, lits) in pm_scanners.items():
@@ -8093,8 +9936,41 @@ def main():
         f"references={shared_table_stats['replaced_arrays']} "
         f"reclaimed-rodata={shared_table_stats['reclaimed_bytes']} bytes")
 
+    bounded_transform_search_rule_ids = {
+        '941120', '942220', '942450', '942480', '942560', '944260',
+    }
+    bounded_multimatch_search_rule_ids = {'934130', '942500'}
+
     for idx, r in enumerate(detection):
-        scope_str, scope_value, vtype, col_mask_str = map_scope(r['variables'])
+        has_effective_transforms = any(
+            transform.lower() != 'none'
+            for transform in r.get('transforms', []))
+        rule_id = str(r.get('id'))
+        bounded_single_search = (
+            not r.get('multimatch') and
+            (r.get('_prefix4_gate_emitted') or
+             rule_id in bounded_transform_search_rule_ids))
+        bounded_multimatch_search = (
+            r.get('multimatch') and
+            rule_id in bounded_multimatch_search_rule_ids)
+        if (r.get('operator') == '@rx' and not r.get('negated') and
+                has_effective_transforms and
+                (bounded_single_search or bounded_multimatch_search)):
+            # Keep the rule's posN collection binding, but execute its exact
+            # unanchored search once over one complete transformed view. The
+            # prefix gate bounds each continuation, and the runtime memoizes
+            # the full search at the first naturally ordered candidate.
+            r['_transform_all_offsets'] = True
+        if r.get('_tx_full_owner'):
+            # The transaction evaluator owns the complete rule and the
+            # generated exact matcher is an explicit zero-result stub. Keep
+            # the inventory entry, but do not route the stub through generic
+            # collection values.
+            scope_str, scope_value, vtype, col_mask_str = (
+                "LUMINA_SCOPE_NONE", 0, 0, "0")
+        else:
+            scope_str, scope_value, vtype, col_mask_str = map_scope(
+                r['variables'])
         hdr_value = map_header_mask(r['variables'])
         table_entries.append(f"    lumina_scan_rule_{r['id']},")
         scope_entries.append(f"    {scope_str},")
@@ -8106,6 +9982,8 @@ def main():
         score_entries.append(f"    {r['score']},")
         rule_id_entries.append(f"    {int(r['id'])},")
         multimatch_entries.append(f"    {'true' if r.get('multimatch') else 'false'},")
+        transform_search_entries.append(
+            f"    {'true' if r.get('_transform_all_offsets') else 'false'},")
         shared_router_entries.append(
             f"    {int(r.get('_shared_router', -1)) + 1 if '_shared_router' in r else 0},")
         scope_values.append(scope_value)
@@ -8121,21 +9999,242 @@ def main():
         for b in fbs:
             if idx < 64 * NWORDS:
                 mask[b][idx >> 6] |= (1 << (idx & 63))
+        if r.get('_transform_all_offsets'):
+            transform_search_rules[idx >> 6] |= 1 << (idx & 63)
+            for byte in first_bytes_of(r.get('pattern') or ''):
+                transform_search_mask[byte][idx >> 6] |= (
+                    1 << (idx & 63))
+        if r.get('_prefix4_gate_emitted'):
+            r['_prefix4_gate'] = True
+            prefix4_gate_count += 1
+        if (r.get('_regex_backend') in {'dfa', 'dfa-all-offsets'} and
+                not r.get('_force_pos0')):
+            try:
+                viable_pairs = dfa_viable_prefix_pairs(
+                    r.get('pattern') or '',
+                    state_budget=args.dfa_state_budget)
+            except (DfaUnsupportedRegex, ValueError, TypeError):
+                viable_pairs = None
+            if viable_pairs is not None:
+                r['_prefix2_viable_pairs'] = viable_pairs
+                prefix2_rule_count += 1
+        probes = mandatory_seed_probe_bytes(r)
+        if probes:
+            mandatory_byte_rules[idx >> 6] |= 1 << (idx & 63)
+            for byte in probes:
+                mandatory_byte_mask[byte][idx >> 6] |= 1 << (idx & 63)
+        # A positive chain head is a necessary condition for the complete chain.
+        # Rejecting it cannot suppress a match from any later chain member.
+        if r.get('operator') == '@rx' and not r.get('negated'):
+            try:
+                alphabet_plan = compile_alphabet_requirement_dnf(
+                    r.get('pattern') or '',
+                    alternative_budget=4096,
+                    requirement_budget=65535,
+                )
+            except (DfaUnsupportedRegex, ValueError, TypeError):
+                alphabet_plan = None
+            if alphabet_plan:
+                r['_alphabet_requirement_dnf'] = alphabet_plan['alternatives']
+                alphabet_gate_count += 1
+        shared_seed_literals = r.get('_shared_seed_literals')
+        if (r.get('operator') == '@rx' and not r.get('negated') and
+                not r.get('_tx_chain')):
+            try:
+                shared_seed_cover = compile_mandatory_seed_cover(
+                    r.get('pattern') or '',
+                    min_seed_len=1,
+                    max_seeds=4096,
+                )
+            except (DfaUnsupportedRegex, ValueError, TypeError):
+                shared_seed_cover = None
+            if shared_seed_cover:
+                shared_seed_literals = shared_seed_cover['seeds']
+        if shared_seed_literals:
+            shared_seed_rule_sets.append((idx, tuple(shared_seed_literals)))
+        contextual_seed_plan = r.get('_contextual_seed_plan')
+        if contextual_seed_plan:
+            contextual_seed_rule_plans.append((idx, contextual_seed_plan))
 
+    request_body_rule_indices = {
+        idx for idx, rule in enumerate(detection)
+        if any(binding.collection == 'REQUEST_BODY' and not binding.excluded
+               for binding in rule.get('bindings', []))
+    }
+    request_body_rule_mask = [0] * NWORDS
+    for idx in request_body_rule_indices:
+        request_body_rule_mask[idx >> 6] |= 1 << (idx & 63)
     first_byte_mask_dense = first_byte_mask_is_dense(mask)
+    shared_seed_gate = build_shared_seed_gate(
+        shared_seed_rule_sets, n, NWORDS)
+    print(
+        "[v9] shared necessary-fragment gate: "
+        f"rules={shared_seed_gate['rule_count']} "
+        f"fragments={shared_seed_gate['fragment_count']} "
+        f"output-classes={len(shared_seed_gate['output_classes'])} "
+        f"triple-hash-slots={len(shared_seed_gate['triple_keys'])}")
+    contextual_seed_gate = build_contextual_seed_gate(
+        contextual_seed_rule_plans, n, NWORDS)
+    print(
+        "[v9] contextual suffix-seed gate: "
+        f"rules={contextual_seed_gate['rule_count']} "
+        f"witnesses={contextual_seed_gate['witness_count']} "
+        f"keys={contextual_seed_gate['key_count']} "
+        f"rows={len(contextual_seed_gate['next_rows'])} "
+        f"output-classes={len(contextual_seed_gate['output_classes'])}")
+    combined_shared_seed_patterns = build_extended_shared_seed_patterns(
+        shared_seed_rule_sets, NWORDS, max_fragment_length=5)
+    combined_contextual_seed_patterns = build_extended_contextual_seed_patterns(
+        contextual_seed_rule_plans, NWORDS, max_literal_length=5)
+    if combined_shared_seed_patterns['rule_mask'] != shared_seed_gate['rule_mask']:
+        raise ValueError("extended shared seed gate changed rule coverage")
+    if (combined_contextual_seed_patterns['rule_mask'] !=
+            contextual_seed_gate['rule_mask']):
+        raise ValueError("extended contextual seed gate changed rule coverage")
+    if (combined_contextual_seed_patterns['witness_count'] !=
+            contextual_seed_gate['witness_count']):
+        raise ValueError("extended contextual seed gate changed witness coverage")
+    combined_seed_proof_ac = build_combined_seed_proof_ac(
+        combined_shared_seed_patterns,
+        combined_contextual_seed_patterns,
+        NWORDS)
+    combined_seed_proof_ac_source = emit_combined_seed_proof_ac(
+        combined_seed_proof_ac, NWORDS)
+    print(
+        "[v9] combined seed-proof AC: "
+        f"shared-fragments={combined_shared_seed_patterns['fragment_count']} "
+        f"context-keys={combined_contextual_seed_patterns['key_count']} "
+        f"context-alternatives="
+        f"{len(combined_contextual_seed_patterns['alternative_rules'])} "
+        f"states={combined_seed_proof_ac['state_count']} "
+        f"alphabet-classes={combined_seed_proof_ac['class_count']} "
+        f"context-rows={len(combined_seed_proof_ac['next_rows'])} "
+        f"output-classes={len(combined_seed_proof_ac['output_classes'])}")
+
+    request_body_shared_seed_patterns = build_extended_shared_seed_patterns(
+        tuple((idx, seeds) for idx, seeds in shared_seed_rule_sets
+              if idx in request_body_rule_indices),
+        NWORDS, max_fragment_length=5)
+    request_body_contextual_seed_patterns = (
+        build_extended_contextual_seed_patterns(
+            tuple((idx, plan) for idx, plan in contextual_seed_rule_plans
+                  if idx in request_body_rule_indices),
+            NWORDS, max_literal_length=5))
+    expected_request_body_shared_mask = [
+        global_word & body_word
+        for global_word, body_word in zip(
+            combined_shared_seed_patterns['rule_mask'],
+            request_body_rule_mask)
+    ]
+    expected_request_body_contextual_mask = [
+        global_word & body_word
+        for global_word, body_word in zip(
+            combined_contextual_seed_patterns['rule_mask'],
+            request_body_rule_mask)
+    ]
+    if (request_body_shared_seed_patterns['rule_mask'] !=
+            expected_request_body_shared_mask):
+        raise ValueError("request-body shared seed cohort changed rule coverage")
+    if (request_body_contextual_seed_patterns['rule_mask'] !=
+            expected_request_body_contextual_mask):
+        raise ValueError(
+            "request-body contextual seed cohort changed rule coverage")
+    request_body_seed_proof_ac = build_combined_seed_proof_ac(
+        request_body_shared_seed_patterns,
+        request_body_contextual_seed_patterns,
+        NWORDS)
+    request_body_seed_proof_ac_source = emit_combined_seed_proof_ac(
+        request_body_seed_proof_ac, NWORDS,
+        function_name='lumina_classify_request_body_seed_proofs_ac')
+    print(
+        "[v9] request-body seed-proof AC: "
+        f"rules={len(request_body_rule_indices)} "
+        f"shared-fragments="
+        f"{request_body_shared_seed_patterns['fragment_count']} "
+        f"context-keys={request_body_contextual_seed_patterns['key_count']} "
+        f"states={request_body_seed_proof_ac['state_count']} "
+        f"alphabet-classes={request_body_seed_proof_ac['class_count']} "
+        f"output-classes="
+        f"{len(request_body_seed_proof_ac['output_classes'])}")
+
+    alphabet_requirement_masks = []
+    alphabet_requirement_mask_ids = {}
+    alphabet_requirement_ids = []
+    alphabet_alternatives = []
+    alphabet_rules = []
+    alphabet_rule_mask = [0] * NWORDS
+    for idx, rule in enumerate(detection):
+        plan = rule.get('_alphabet_requirement_dnf')
+        if not plan:
+            alphabet_rules.append((0, 0))
+            continue
+        first_alternative = len(alphabet_alternatives)
+        for alternative in plan:
+            first_requirement = len(alphabet_requirement_ids)
+            for requirement in alternative:
+                requirement_id = alphabet_requirement_mask_ids.get(requirement)
+                if requirement_id is None:
+                    requirement_id = len(alphabet_requirement_masks)
+                    alphabet_requirement_mask_ids[requirement] = requirement_id
+                    alphabet_requirement_masks.append(requirement)
+                alphabet_requirement_ids.append(requirement_id)
+            alphabet_alternatives.append(
+                (first_requirement, len(alternative)))
+        alphabet_rules.append((first_alternative, len(plan)))
+        alphabet_rule_mask[idx >> 6] |= 1 << (idx & 63)
+
+    if len(alphabet_requirement_masks) > 65535:
+        raise ValueError("alphabet requirement mask ID exceeds uint16_t")
+    if any(count > 65535 for _, count in alphabet_alternatives):
+        raise ValueError("alphabet alternative requirement count exceeds uint16_t")
+    if any(count > 65535 for _, count in alphabet_rules):
+        raise ValueError("alphabet rule alternative count exceeds uint16_t")
+    print(
+        "[v9] alphabet rejection gate: "
+        f"rules={alphabet_gate_count} "
+        f"alternatives={len(alphabet_alternatives)} "
+        f"requirements={len(alphabet_requirement_ids)} "
+        f"unique-masks={len(alphabet_requirement_masks)}")
+
+    prefix2_reject = [[0] * NWORDS for _ in range(65536)]
+    for idx, rule in enumerate(detection):
+        viable_pairs = rule.get('_prefix2_viable_pairs')
+        if viable_pairs is None:
+            continue
+        word = idx >> 6
+        bit = 1 << (idx & 63)
+        for pair in range(65536):
+            if pair not in viable_pairs:
+                prefix2_reject[pair][word] |= bit
+
+    prefix2_class_ids = {}
+    prefix2_classes = []
+    prefix2_class_map = []
+    for reject_words in prefix2_reject:
+        key = tuple(reject_words)
+        class_id = prefix2_class_ids.get(key)
+        if class_id is None:
+            class_id = len(prefix2_classes)
+            prefix2_class_ids[key] = class_id
+            prefix2_classes.append(key)
+        prefix2_class_map.append(class_id)
+    prefix2_class_type = (
+        'uint8_t' if len(prefix2_classes) <= 256 else 'uint16_t')
+    print(
+        "[v9] two-byte DFA router: "
+        f"rules={prefix2_rule_count} classes={len(prefix2_classes)} "
+        f"class-map-bytes={65536 * (1 if prefix2_class_type == 'uint8_t' else 2)} "
+        f"prefix4-gates={prefix4_gate_count}")
 
     anywhere_mask = [0] * NWORDS
     empty_mask = [0] * NWORDS
-    request_body_mask = [0] * NWORDS
+    request_body_mask = list(request_body_rule_mask)
     xml_container_mask = [0] * NWORDS
     for idx in range(n):
         if detection[idx].get('operator') == '@rx' and not detection[idx].get('_tx_chain'):
             positive_empty = regex_matches_empty(detection[idx].get('pattern') or '')
             if positive_empty != bool(detection[idx].get('negated')):
                 empty_mask[idx >> 6] |= 1 << (idx & 63)
-        if any(binding.collection == 'REQUEST_BODY' and not binding.excluded
-               for binding in detection[idx].get('bindings', [])):
-            request_body_mask[idx >> 6] |= 1 << (idx & 63)
         if str(detection[idx].get('_regex_backend', '')).endswith('xml-collection-chain'):
             xml_container_mask[idx >> 6] |= 1 << (idx & 63)
         if detection[idx].get('_no_anywhere'):
@@ -8191,6 +10290,227 @@ def main():
 
     def emit_word_array(words):
         return "{" + ", ".join(f"0x{x:016x}ULL" for x in words) + "}"
+
+    def emit_scalar_rows(values, width=32):
+        return "\n".join(
+            "    " + ", ".join(str(value) for value in values[i:i + width]) + ","
+            for i in range(0, len(values), width)
+        )
+
+    def emit_word_rows(words, width=4):
+        return "\n".join(
+            "    " + ", ".join(
+                f"0x{value:016x}ULL"
+                for value in words[i:i + width]
+            ) + ","
+            for i in range(0, len(words), width)
+        )
+
+    def emit_requirement_mask(mask):
+        return emit_word_array([
+            (mask >> (word * 64)) & 0xffffffffffffffff
+            for word in range(4)
+        ])
+
+    shared_seed_gate_src = (
+        "#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE)\n"
+        f"static const uint16_t g_shared_seed_byte_class[256] = {{\n"
+        f"{emit_scalar_rows(shared_seed_gate['byte_classes'])}\n"
+        "};\n"
+        f"static const uint16_t g_shared_seed_pair_class[65536] = {{\n"
+        f"{emit_scalar_rows(shared_seed_gate['pair_classes'])}\n"
+        "};\n"
+        f"static const uint32_t g_shared_seed_triple_key"
+        f"[{len(shared_seed_gate['triple_keys'])}] = {{\n"
+        f"{emit_scalar_rows(shared_seed_gate['triple_keys'], width=16)}\n"
+        "};\n"
+        f"static const uint16_t g_shared_seed_triple_class"
+        f"[{len(shared_seed_gate['triple_classes'])}] = {{\n"
+        f"{emit_scalar_rows(shared_seed_gate['triple_classes'])}\n"
+        "};\n"
+        f"static const uint64_t g_shared_seed_triple_bloom[1024] = {{\n"
+        f"{emit_word_rows(shared_seed_gate['triple_bloom'])}\n"
+        "};\n"
+        f"static const uint64_t g_shared_seed_output"
+        f"[{len(shared_seed_gate['output_classes'])}]"
+        f"[{NWORDS}] = {{\n"
+    )
+    for words in shared_seed_gate['output_classes']:
+        shared_seed_gate_src += f"    {emit_word_array(words)},\n"
+    shared_seed_gate_src += (
+        "};\n"
+        f"static const uint64_t g_shared_seed_rule_mask[{NWORDS}] = "
+        f"{emit_word_array(shared_seed_gate['rule_mask'])};\n"
+        "static inline void lumina_shared_seed_add_class(\n"
+        "        uint64_t observed[CRS_SHORT_RULE_MASK_DIMS],\n"
+        "        uint16_t class_id) {\n"
+        "    if (class_id == 0) return;\n"
+        "    for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word)\n"
+        "        observed[word] |= g_shared_seed_output[class_id][word];\n"
+        "}\n"
+        "static inline uint16_t lumina_shared_seed_triple_class(\n"
+        "        uint32_t key) {\n"
+        "#if !defined(LUMINA_DISABLE_SHARED_SEED_TRIPLE_BLOOM)\n"
+        "    uint32_t bloom_bit = (key * UINT32_C(2246822519)) & 0xffffu;\n"
+        "    if ((g_shared_seed_triple_bloom[bloom_bit >> 6] &\n"
+        "         (UINT64_C(1) << (bloom_bit & 63))) == 0) return 0;\n"
+        "#endif\n"
+        f"    uint32_t slot = (key * UINT32_C(2654435761)) & "
+        f"UINT32_C({len(shared_seed_gate['triple_keys']) - 1});\n"
+        "    uint32_t stored = key + 1u;\n"
+        "    while (g_shared_seed_triple_key[slot] != 0 &&\n"
+        "           g_shared_seed_triple_key[slot] != stored)\n"
+        f"        slot = (slot + 1u) & "
+        f"UINT32_C({len(shared_seed_gate['triple_keys']) - 1});\n"
+        "    return g_shared_seed_triple_key[slot] == stored\n"
+        "        ? g_shared_seed_triple_class[slot] : 0;\n"
+        "}\n"
+        "#endif\n\n"
+    )
+
+    contextual_seed_gate_src = (
+        "#if !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)\n"
+        f"static const uint16_t g_context_seed_byte_row[256] = {{\n"
+        f"{emit_scalar_rows(contextual_seed_gate['byte_rows'])}\n"
+        "};\n"
+        f"static const uint16_t g_context_seed_pair_row[65536] = {{\n"
+        f"{emit_scalar_rows(contextual_seed_gate['pair_rows'])}\n"
+        "};\n"
+        f"static const uint32_t g_context_seed_triple_key"
+        f"[{len(contextual_seed_gate['triple_keys'])}] = {{\n"
+        f"{emit_scalar_rows(contextual_seed_gate['triple_keys'], width=16)}\n"
+        "};\n"
+        f"static const uint16_t g_context_seed_triple_row"
+        f"[{len(contextual_seed_gate['triple_rows'])}] = {{\n"
+        f"{emit_scalar_rows(contextual_seed_gate['triple_rows'])}\n"
+        "};\n"
+        f"static const uint64_t g_context_seed_triple_bloom[1024] = {{\n"
+        f"{emit_word_rows(contextual_seed_gate['triple_bloom'])}\n"
+        "};\n"
+        f"static const uint8_t g_context_seed_next"
+        f"[{len(contextual_seed_gate['next_rows'])}][256] = {{\n"
+    )
+    for row in contextual_seed_gate['next_rows']:
+        contextual_seed_gate_src += (
+            f"    {{{', '.join(str(value) for value in row)}}},\n")
+    contextual_seed_gate_src += (
+        "};\n"
+        f"static const uint64_t g_context_seed_output"
+        f"[{len(contextual_seed_gate['output_classes'])}]"
+        f"[{NWORDS}] = {{\n"
+    )
+    for words in contextual_seed_gate['output_classes']:
+        contextual_seed_gate_src += f"    {emit_word_array(words)},\n"
+    contextual_seed_gate_src += (
+        "};\n"
+        f"static const uint64_t g_context_seed_rule_mask[{NWORDS}] = "
+        f"{emit_word_array(contextual_seed_gate['rule_mask'])};\n"
+        "static inline uint16_t lumina_context_seed_triple_row(\n"
+        "        uint32_t key) {\n"
+        "    uint32_t bloom_bit =\n"
+        "        (key * UINT32_C(2246822519)) & 0xffffu;\n"
+        "    if ((g_context_seed_triple_bloom[bloom_bit >> 6] &\n"
+        "         (UINT64_C(1) << (bloom_bit & 63))) == 0) return 0;\n"
+        f"    uint32_t slot = (key * UINT32_C(2654435761)) & "
+        f"UINT32_C({len(contextual_seed_gate['triple_keys']) - 1});\n"
+        "    uint32_t stored = key + 1u;\n"
+        "    while (g_context_seed_triple_key[slot] != 0 &&\n"
+        "           g_context_seed_triple_key[slot] != stored)\n"
+        f"        slot = (slot + 1u) & "
+        f"UINT32_C({len(contextual_seed_gate['triple_keys']) - 1});\n"
+        "    return g_context_seed_triple_key[slot] == stored\n"
+        "        ? g_context_seed_triple_row[slot] : 0;\n"
+        "}\n"
+        "static inline void lumina_context_seed_add_row(\n"
+        "        uint64_t observed[CRS_SHORT_RULE_MASK_DIMS],\n"
+        "        uint16_t row_id, uint8_t next_byte) {\n"
+        "    if (row_id == 0) return;\n"
+        "    uint8_t class_id = g_context_seed_next[row_id][next_byte];\n"
+        "    if (class_id == 0) return;\n"
+        "    for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word)\n"
+        "        observed[word] |= g_context_seed_output[class_id][word];\n"
+        "}\n"
+        "#endif\n\n"
+    )
+
+    alphabet_gate_src = (
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "typedef struct {\n"
+        "    uint32_t first_requirement;\n"
+        "    uint16_t requirement_count;\n"
+        "} LuminaAlphabetAlternative;\n"
+        "typedef struct {\n"
+        "    uint32_t first_alternative;\n"
+        "    uint16_t alternative_count;\n"
+        "} LuminaAlphabetRule;\n"
+        f"static const uint64_t g_alphabet_requirement_masks"
+        f"[{len(alphabet_requirement_masks)}][4] = {{\n"
+    )
+    for requirement in alphabet_requirement_masks:
+        alphabet_gate_src += f"    {emit_requirement_mask(requirement)},\n"
+    alphabet_gate_src += (
+        "};\n"
+        f"static const uint16_t g_alphabet_requirement_ids"
+        f"[{len(alphabet_requirement_ids)}] = {{\n"
+        f"{emit_scalar_rows(alphabet_requirement_ids, width=24)}\n"
+        "};\n"
+        f"static const LuminaAlphabetAlternative g_alphabet_alternatives"
+        f"[{len(alphabet_alternatives)}] = {{\n"
+    )
+    for first_requirement, requirement_count in alphabet_alternatives:
+        alphabet_gate_src += (
+            f"    {{{first_requirement}u, {requirement_count}u}},\n")
+    alphabet_gate_src += (
+        "};\n"
+        f"static const LuminaAlphabetRule g_alphabet_rules[{n}] = {{\n"
+    )
+    for first_alternative, alternative_count in alphabet_rules:
+        alphabet_gate_src += (
+            f"    {{{first_alternative}u, {alternative_count}u}},\n")
+    alphabet_gate_src += (
+        "};\n"
+        f"static const uint64_t g_alphabet_rule_mask[{NWORDS}] = "
+        f"{emit_word_array(alphabet_rule_mask)};\n"
+        "static inline int lumina_alphabet_rule_possible(\n"
+        "        unsigned idx, const uint64_t observed[4]) {\n"
+        "    const LuminaAlphabetRule *rule = &g_alphabet_rules[idx];\n"
+        "    if (rule->alternative_count == 0) return 1;\n"
+        "    for (uint32_t alternative_index = 0;\n"
+        "         alternative_index < rule->alternative_count;\n"
+        "         ++alternative_index) {\n"
+        "        const LuminaAlphabetAlternative *alternative =\n"
+        "            &g_alphabet_alternatives[\n"
+        "                rule->first_alternative + alternative_index];\n"
+        "        bool possible = true;\n"
+        "        for (uint32_t requirement_index = 0;\n"
+        "             requirement_index < alternative->requirement_count;\n"
+        "             ++requirement_index) {\n"
+        "            uint16_t requirement_id = g_alphabet_requirement_ids[\n"
+        "                alternative->first_requirement + requirement_index];\n"
+        "            const uint64_t *required =\n"
+        "                g_alphabet_requirement_masks[requirement_id];\n"
+        "            if (((observed[0] & required[0]) |\n"
+        "                 (observed[1] & required[1]) |\n"
+        "                 (observed[2] & required[2]) |\n"
+        "                 (observed[3] & required[3])) == 0) {\n"
+        "                possible = false;\n"
+        "                break;\n"
+        "            }\n"
+        "        }\n"
+        "        if (possible) return 1;\n"
+        "    }\n"
+        "    return 0;\n"
+        "}\n"
+        "static inline int lumina_alphabet_view_possible(\n"
+        "        unsigned idx, const unsigned char *data, size_t len) {\n"
+        "    if (g_alphabet_rules[idx].alternative_count == 0) return 1;\n"
+        "    uint64_t observed[4] = {0, 0, 0, 0};\n"
+        "    for (size_t i = 0; i < len; ++i)\n"
+        "        observed[data[i] >> 6] |= UINT64_C(1) << (data[i] & 63);\n"
+        "    return lumina_alphabet_rule_possible(idx, observed);\n"
+        "}\n"
+        "#endif\n\n"
+    )
     # ---- emit chunks ----
     os.makedirs(args.out_dir, exist_ok=True)
     # clean old parser_rules chunks
@@ -8206,10 +10526,500 @@ def main():
     # rules retain a bounded raw prefix and separately derive its transformed
     # length. This preserves anchors, word boundaries and local decode context
     # without re-transforming the full request prefix for every candidate.
+    def emit_transform_input_scan(name, cached):
+        linkage = "static __attribute__((noinline))" if cached else "static inline"
+        cache_decl = ""
+        shared_cache = ""
+        context_cache = ""
+        if cached:
+            cache_decl = (
+                "    uint32_t shared_seen[64] = {0};\n"
+                "    uint64_t context_seen[64] = {0};\n")
+            shared_cache = (
+                "            uint32_t slot =\n"
+                "                (shared_triple * UINT32_C(2654435761)) >> 26;\n"
+                "            uint32_t tag = shared_triple + 1u;\n"
+                "            if (shared_seen[slot] == tag) {\n"
+                "                shared_gram_new = false;\n"
+                "            } else {\n"
+                "                shared_seen[slot] = tag;\n"
+                "            }\n")
+            context_cache = (
+                "                uint32_t quad = ((uint32_t)seed_prev2 << 24) |\n"
+                "                                ((uint32_t)seed_prev1 << 16) |\n"
+                "                                ((uint32_t)seed_byte << 8) |\n"
+                "                                next_byte;\n"
+                "                uint32_t slot =\n"
+                "                    (quad * UINT32_C(2246822519)) >> 26;\n"
+                "                uint64_t tag = (uint64_t)quad + UINT64_C(1);\n"
+                "                if (context_seen[slot] == tag) {\n"
+                "                    context_gram_new = false;\n"
+                "                } else {\n"
+                "                    context_seen[slot] = tag;\n"
+                "                }\n")
+        template = """
+@LINKAGE@ void @NAME@(
+        LuminaTransformInputClass *input,
+        const unsigned char *data, size_t len,
+        int collect_shared, int collect_context) {
+@CACHE_DECL@#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE) || !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)
+    uint8_t seed_prev2 = 0;
+    uint8_t seed_prev1 = 0;
+#endif
+    for (size_t i = 0; i < len; ++i) {
+        input->observed_bytes[data[i] >> 6] |=
+            UINT64_C(1) << (data[i] & 63);
+#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE) || !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)
+        uint8_t seed_byte = 0;
+        if (collect_shared || collect_context) {
+            seed_byte = data[i];
+            if (seed_byte >= 'A' && seed_byte <= 'Z') seed_byte |= 0x20u;
+        }
+#endif
+#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE)
+        if (collect_shared) {
+            bool shared_gram_new = true;
+            uint32_t shared_triple = 0;
+            if (i >= 2) {
+                shared_triple = ((uint32_t)seed_prev2 << 16) |
+                                ((uint32_t)seed_prev1 << 8) |
+                                seed_byte;
+@SHARED_CACHE@        }
+            if (shared_gram_new) {
+                lumina_shared_seed_add_class(
+                    input->observed_seed_rules,
+                    g_shared_seed_byte_class[seed_byte]);
+                if (i >= 1) {
+                    uint16_t pair =
+                        (uint16_t)(((uint16_t)seed_prev1 << 8) |
+                                   seed_byte);
+                    lumina_shared_seed_add_class(
+                        input->observed_seed_rules,
+                        g_shared_seed_pair_class[pair]);
+                }
+                if (i >= 2)
+                    lumina_shared_seed_add_class(
+                        input->observed_seed_rules,
+                        lumina_shared_seed_triple_class(shared_triple));
+            }
+        }
+#endif
+#if !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)
+        if (collect_context && i + 1 < len) {
+            uint8_t next_byte = data[i + 1];
+            if (next_byte >= 'A' && next_byte <= 'Z')
+                next_byte |= 0x20u;
+            bool context_gram_new = true;
+            if (i >= 2) {
+@CONTEXT_CACHE@            }
+            if (context_gram_new) {
+                lumina_context_seed_add_row(
+                    input->observed_context_rules,
+                    g_context_seed_byte_row[seed_byte], next_byte);
+                if (i >= 1) {
+                    uint16_t pair =
+                        (uint16_t)(((uint16_t)seed_prev1 << 8) |
+                                   seed_byte);
+                    lumina_context_seed_add_row(
+                        input->observed_context_rules,
+                        g_context_seed_pair_row[pair], next_byte);
+                }
+                if (i >= 2) {
+                    uint32_t triple = ((uint32_t)seed_prev2 << 16) |
+                                      ((uint32_t)seed_prev1 << 8) |
+                                      seed_byte;
+                    lumina_context_seed_add_row(
+                        input->observed_context_rules,
+                        lumina_context_seed_triple_row(triple),
+                        next_byte);
+                }
+            }
+        }
+#endif
+#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE) || !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)
+        if (collect_shared || collect_context) {
+            seed_prev2 = seed_prev1;
+            seed_prev1 = seed_byte;
+        }
+#endif
+    }
+}
+"""
+        return (template
+                .replace("@NAME@", name)
+                .replace("@LINKAGE@", linkage)
+                .replace("@CACHE_DECL@", cache_decl)
+                .replace("@SHARED_CACHE@", shared_cache)
+                .replace("@CONTEXT_CACHE@", context_cache))
+
+    TRANSFORM_INPUT_SCAN_SRC = (
+        emit_transform_input_scan(
+            "lumina_classify_transform_input_plain", cached=False) +
+        "#if !defined(LUMINA_DISABLE_SEED_GRAM_CACHE)\n" +
+        """
+static __attribute__((noinline)) int lumina_seed_gram_cache_profitable(
+        const unsigned char *data, size_t len) {
+    uint32_t seen[64] = {0};
+    uint32_t probes = 0;
+    uint32_t hits = 0;
+    uint8_t prev2 = 0;
+    uint8_t prev1 = 0;
+    size_t sample_len = len < 64 ? len : 64;
+    for (size_t i = 0; i < sample_len; ++i) {
+        uint8_t byte = data[i];
+        if (byte >= 'A' && byte <= 'Z') byte |= 0x20u;
+        if (i >= 2) {
+            uint32_t triple = ((uint32_t)prev2 << 16) |
+                              ((uint32_t)prev1 << 8) |
+                              byte;
+            uint32_t slot =
+                (triple * UINT32_C(2654435761)) >> 26;
+            uint32_t tag = triple + 1u;
+            ++probes;
+            if (seen[slot] == tag) {
+                ++hits;
+            } else {
+                seen[slot] = tag;
+            }
+        }
+        prev2 = prev1;
+        prev1 = byte;
+    }
+    return probes != 0 && hits * 4u >= probes;
+}
+""" +
+        emit_transform_input_scan(
+            "lumina_classify_transform_input_cached", cached=True) +
+        "#endif\n")
+
+    multimatch_prefix_dag = multimatch_prefix_dag_plan(detection)
+    if multimatch_prefix_dag is not None:
+        idx_934100 = multimatch_prefix_dag['934100']
+        idx_934160 = multimatch_prefix_dag['934160']
+        idx_934101 = multimatch_prefix_dag['934101']
+        MULTIMATCH_PREFIX_DAG_SRC = f"""
+#if defined(LUMINA_ENABLE_EXPERIMENTAL_9341XX_PREFIX_DAG)
+typedef struct {{
+    uint8_t *storage;
+    const unsigned char *data;
+    size_t len;
+    LuminaTransformFeatures features;
+    uint8_t owned;
+}} LuminaPrefixDagView;
+
+static inline int lumina_prefix_dag_apply(
+        LuminaPrefixDagView *view, LuminaTransformId transform) {{
+#if defined(LUMINA_DISABLE_TRANSFORM_FEATURE_PROOFS)
+    if (!lumina_transform_step_may_change(
+            transform, view->data, view->len))
+        return 0;
+#else
+    if (!lumina_transform_features_may_change(
+            &view->features, transform))
+        return 0;
+#endif
+    if (!view->owned) {{
+        lumina_transform_copy(view->storage, view->data, view->len);
+        view->data = view->storage;
+        view->owned = 1;
+    }}
+#if defined(LUMINA_DISABLE_TRANSFORM_FEATURE_PROOFS)
+    size_t previous_len = view->len;
+    view->len = lumina_apply_transform_step(
+        transform, view->storage, view->len);
+#else
+    size_t previous_len = view->len;
+    view->len = lumina_apply_transform_step_features(
+        transform, view->storage, view->len, &view->features);
+#endif
+    lumina_record_transform_view(previous_len, view->len);
+    return 1;
+}}
+
+static inline void lumina_prefix_dag_match(
+        int idx, const unsigned char *data, size_t len, int *result) {{
+    if (*result == 0)
+        *result = lumina_call_exact_verifier(idx, data, len, 0, 1);
+}}
+
+static inline int lumina_prefix_dag_base64_cohort(
+        const LuminaTransformInputClass *input, size_t len) {{
+    static const uint64_t allowed[4] = {{
+        UINT64_C(0x03ff880000000000),
+        UINT64_C(0x07fffffe07fffffe),
+        UINT64_C(0),
+        UINT64_C(0)
+    }};
+    if (len == 0 || (len & 3u) == 1u) return 0;
+    for (size_t word = 0; word < 4; ++word)
+        if (input->observed_bytes[word] & ~allowed[word])
+            return 0;
+    return 1;
+}}
+
+static __attribute__((noinline)) int lumina_dispatch_9341xx_prefix_dag(
+        LuminaTransformDispatchWorkspace *workspace, int idx,
+        const unsigned char *data, size_t len) {{
+    enum {{
+        IDX_934100 = {idx_934100},
+        IDX_934160 = {idx_934160},
+        IDX_934101 = {idx_934101}
+    }};
+    LuminaMultiMatchPrefixDagCache *cache =
+        &workspace->multimatch_prefix_dag;
+    if (!cache->valid || cache->data != data || cache->len != len) {{
+        cache->data = data;
+        cache->len = len;
+        cache->result[0] = 0;
+        cache->result[1] = 0;
+        cache->result[2] = 0;
+        lumina_classify_transform_input(
+            &workspace->input, data, len, 0, 0);
+
+        lumina_prefix_dag_match(
+            IDX_934100, data, len, &cache->result[0]);
+        lumina_prefix_dag_match(
+            IDX_934160, data, len, &cache->result[1]);
+        lumina_prefix_dag_match(
+            IDX_934101, data, len, &cache->result[2]);
+
+        workspace->views[6].valid = 0;
+        workspace->views[7].valid = 0;
+        LuminaPrefixDagView shared = {{
+            lumina_xform_scratch_slot(6), data, len, {{0}}, 0
+        }};
+        lumina_transform_features_init(
+            &shared.features, workspace->input.observed_bytes);
+        if (lumina_prefix_dag_apply(
+                &shared, LUMINA_T_URL_DECODE_UNI)) {{
+            lumina_prefix_dag_match(
+                IDX_934100, shared.data, shared.len, &cache->result[0]);
+            lumina_prefix_dag_match(
+                IDX_934160, shared.data, shared.len, &cache->result[1]);
+            lumina_prefix_dag_match(
+                IDX_934101, shared.data, shared.len, &cache->result[2]);
+        }}
+        if (lumina_prefix_dag_apply(&shared, LUMINA_T_JS_DECODE)) {{
+            lumina_prefix_dag_match(
+                IDX_934100, shared.data, shared.len, &cache->result[0]);
+            lumina_prefix_dag_match(
+                IDX_934160, shared.data, shared.len, &cache->result[1]);
+            lumina_prefix_dag_match(
+                IDX_934101, shared.data, shared.len, &cache->result[2]);
+        }}
+
+        LuminaPrefixDagView branch_934100 = {{
+            lumina_xform_scratch_slot(7), shared.data, shared.len,
+            shared.features, 0
+        }};
+        static const LuminaTransformId branch_934100_steps[] = {{
+            LUMINA_T_REMOVE_WS, LUMINA_T_BASE64_DECODE,
+            LUMINA_T_URL_DECODE_UNI, LUMINA_T_JS_DECODE,
+            LUMINA_T_REMOVE_WS
+        }};
+        for (size_t step = 0;
+             step < sizeof(branch_934100_steps) /
+                    sizeof(branch_934100_steps[0]); ++step) {{
+            if (lumina_prefix_dag_apply(
+                    &branch_934100, branch_934100_steps[step]))
+                lumina_prefix_dag_match(
+                    IDX_934100, branch_934100.data,
+                    branch_934100.len, &cache->result[0]);
+        }}
+
+        static const LuminaTransformId shared_steps[] = {{
+            LUMINA_T_BASE64_DECODE, LUMINA_T_URL_DECODE_UNI,
+            LUMINA_T_JS_DECODE
+        }};
+        for (size_t step = 0;
+             step < sizeof(shared_steps) / sizeof(shared_steps[0]); ++step) {{
+            if (!lumina_prefix_dag_apply(&shared, shared_steps[step]))
+                continue;
+            lumina_prefix_dag_match(
+                IDX_934160, shared.data, shared.len, &cache->result[1]);
+            lumina_prefix_dag_match(
+                IDX_934101, shared.data, shared.len, &cache->result[2]);
+        }}
+        if (lumina_prefix_dag_apply(
+                &shared, LUMINA_T_REPLACE_COMMENTS))
+            lumina_prefix_dag_match(
+                IDX_934160, shared.data, shared.len, &cache->result[1]);
+
+        workspace->views[6].valid = 0;
+        workspace->views[7].valid = 0;
+        cache->valid = 1;
+    }}
+    if (idx == IDX_934100) return cache->result[0];
+    if (idx == IDX_934160) return cache->result[1];
+    return cache->result[2];
+}}
+#endif
+"""
+        MULTIMATCH_PREFIX_DAG_DISPATCH = f"""
+#if defined(LUMINA_ENABLE_EXPERIMENTAL_9341XX_PREFIX_DAG)
+        if (len >= 4096u && offset == 0 &&
+        (idx == {idx_934100} || idx == {idx_934160} ||
+         idx == {idx_934101})) {{
+            if (lumina_prefix_dag_base64_cohort(&workspace->input, len))
+                return lumina_dispatch_9341xx_prefix_dag(
+                    workspace, idx, data, len);
+        }}
+#endif
+"""
+    else:
+        MULTIMATCH_PREFIX_DAG_SRC = ""
+        MULTIMATCH_PREFIX_DAG_DISPATCH = ""
+
+    if multimatch_prefix_dag is not None:
+        idx_934100 = multimatch_prefix_dag['934100']
+        idx_934160 = multimatch_prefix_dag['934160']
+        idx_934101 = multimatch_prefix_dag['934101']
+        MULTIMATCH_SHARED_BASE64_SRC = f"""
+#if defined(LUMINA_ENABLE_9341XX_SHARED_BASE64) && \\
+    defined(LUMINA_ENABLE_EXPERIMENTAL_9341XX_PREFIX_DAG)
+#error "The 9341xx shared-Base64 cache and prefix DAG use the same scratch slots"
+#endif
+#if defined(LUMINA_ENABLE_9341XX_SHARED_BASE64)
+static inline int lumina_is_9341xx_shared_base64_rule(int idx) {{
+    return idx == {idx_934100} || idx == {idx_934160} ||
+           idx == {idx_934101};
+}}
+
+static inline size_t lumina_apply_multimatch_step_shared_base64(
+        LuminaTransformDispatchWorkspace *workspace, int idx,
+        LuminaTransformId transform, const unsigned char *data,
+        size_t input_len, size_t offset, uint8_t *view, size_t view_len,
+        LuminaTransformFeatures *features, int *prefix_changed) {{
+    LuminaMultiMatchBase64Cache *cache = &workspace->multimatch_base64;
+    uint8_t *cache_storage = lumina_xform_scratch_slot(7);
+    int share = transform == LUMINA_T_BASE64_DECODE &&
+        offset == 0 && input_len >= 4096u && view_len == input_len &&
+        !*prefix_changed && lumina_is_9341xx_shared_base64_rule(idx) &&
+        cache_storage != view;
+    if (share && cache->valid && cache->data == data &&
+        cache->input_len == input_len) {{
+        lumina_transform_copy(view, cache_storage, cache->decoded_len);
+        *features = cache->features;
+        lumina_record_transform_cache_hit(cache->decoded_len);
+        *prefix_changed = cache->decoded_len != input_len;
+        return cache->decoded_len;
+    }}
+
+    size_t output_len = lumina_apply_transform_step_features(
+        transform, view, view_len, features);
+    if (share) {{
+        lumina_transform_copy(cache_storage, view, output_len);
+        cache->data = data;
+        cache->input_len = input_len;
+        cache->decoded_len = output_len;
+        cache->features = *features;
+        cache->valid = 1;
+    }}
+    if (output_len != view_len ||
+        lumina_transform_may_change_at_equal_length(transform))
+        *prefix_changed = 1;
+    return output_len;
+}}
+
+static inline int lumina_dispatch_multimatch_shared_base64_long(
+        LuminaTransformDispatchWorkspace *workspace, int idx,
+        const LuminaTransformId *seq, const unsigned char *data,
+        size_t len, uint8_t *view) {{
+    lumina_transform_copy(view, data, len);
+    size_t view_len = len;
+    int prefix_changed = 0;
+    LuminaTransformFeatures features;
+    lumina_transform_features_init(
+        &features, workspace->input.observed_bytes);
+
+    for (int i = 0; i < 12 && seq[i] != LUMINA_T_NONE; ++i) {{
+        if (!lumina_transform_features_may_change(
+                &features, seq[i]))
+            continue;
+        size_t previous_len = view_len;
+        view_len = lumina_apply_multimatch_step_shared_base64(
+            workspace, idx, seq[i], data, len, 0, view, view_len,
+            &features, &prefix_changed);
+        bool view_changed = view_len != previous_len ||
+            lumina_transform_may_change_at_equal_length(seq[i]);
+        if (!view_changed)
+            continue;
+        lumina_record_transform_view(previous_len, view_len);
+#if !defined(LUMINA_DISABLE_ALPHABET_GATE)
+        if (!lumina_alphabet_view_possible(idx, view, view_len))
+            continue;
+#endif
+        int result = lumina_call_exact_verifier(
+            idx, view, view_len, 0, 1);
+        if (result)
+            return result;
+    }}
+    return 0;
+}}
+#endif
+"""
+        MULTIMATCH_SHARED_BASE64_LONG_ENTRY = """
+__attribute__((visibility("hidden"), noinline, section(".lumina_long_text")))
+int lumina_dispatch_rule_long(
+        int idx, const unsigned char *data, size_t len, size_t offset) {
+#if defined(LUMINA_ENABLE_9341XX_SHARED_BASE64) && \
+    !defined(LUMINA_DISABLE_INCREMENTAL_MULTIMATCH) && \
+    !defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY) && \
+    !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)
+    if (offset == 0 && lumina_is_9341xx_shared_base64_rule(idx)) {
+        const LuminaTransformId *seq = g_rule_transform_seq[idx];
+        LuminaTransformDispatchWorkspace *workspace =
+            lumina_acquire_transform_dispatch_workspace();
+        const uint8_t sequence_id = g_rule_transform_seq_id[idx];
+        if (!lumina_transform_sequence_may_change(
+                &workspace->input, sequence_id, data, len))
+            return lumina_call_exact_verifier(idx, data, len, 0, 0);
+        if (len <= lumina_xform_scratch_cap()) {
+            int result = 0;
+#if !defined(LUMINA_DISABLE_ALPHABET_GATE)
+            if (lumina_alphabet_rule_possible(
+                    idx, workspace->input.observed_bytes))
+                result = lumina_call_exact_verifier(
+                    idx, data, len, 0, 0);
+#else
+            result = lumina_call_exact_verifier(idx, data, len, 0, 0);
+#endif
+            if (result)
+                return result;
+            const size_t cache_slot =
+                sequence_id & (LUMINA_TRANSFORM_VIEW_SLOTS - 1u);
+            workspace->views[cache_slot].valid = 0;
+            return lumina_dispatch_multimatch_shared_base64_long(
+                workspace, idx, seq, data, len,
+                lumina_xform_scratch_slot(cache_slot));
+        }
+    }
+#endif
+    return lumina_dispatch_rule(idx, data, len, offset);
+}
+"""
+    else:
+        MULTIMATCH_SHARED_BASE64_SRC = ""
+        MULTIMATCH_SHARED_BASE64_LONG_ENTRY = """
+__attribute__((visibility("hidden"), noinline, section(".lumina_long_text")))
+int lumina_dispatch_rule_long(
+        int idx, const unsigned char *data, size_t len, size_t offset) {
+    return lumina_dispatch_rule(idx, data, len, offset);
+}
+"""
+
     DISPATCH_SRC = (
         "#include <string.h>\n"
         "#include \"lumina_transforms.h\"\n"
         "#include \"generated/crs_transform_mask.h\"\n\n"
+        "extern void lumina_classify_seed_proofs_ac(\n"
+        "    uint64_t*,uint64_t*,uint64_t*,const unsigned char*,size_t,int,int);\n"
+        "extern void lumina_classify_request_body_seed_proofs_ac(\n"
+        "    uint64_t*,uint64_t*,uint64_t*,const unsigned char*,size_t,int,int);\n"
+        "enum {\n"
+        "    LUMINA_PROOF_COHORT_GLOBAL = 0,\n"
+        "    LUMINA_PROOF_COHORT_REQUEST_BODY = 1\n"
+        "};\n"
         "static int g_anywhere_p[LUMINA_SHORT_RULE_COUNT];\n"
         "static int g_anywhere_p_init = 0;\n"
         "typedef struct {\n"
@@ -8221,16 +11031,44 @@ def main():
         "    uint8_t sequence_id;\n"
         "    uint8_t valid;\n"
         "} LuminaTransformViewCache;\n"
+        "typedef struct {\n"
+        "    const unsigned char *data;\n"
+        "    size_t len;\n"
+        "    int result[3];\n"
+        "    uint8_t valid;\n"
+        "} LuminaMultiMatchPrefixDagCache;\n"
+        "#if defined(LUMINA_ENABLE_9341XX_SHARED_BASE64)\n"
+        "typedef struct {\n"
+        "    const unsigned char *data;\n"
+        "    size_t input_len;\n"
+        "    size_t decoded_len;\n"
+        "    LuminaTransformFeatures features;\n"
+        "    uint8_t valid;\n"
+        "} LuminaMultiMatchBase64Cache;\n"
+        "#endif\n"
         "#define LUMINA_TRANSFORM_VIEW_SLOTS 8u\n"
         "typedef struct {\n"
         "    const unsigned char *data;\n"
         "    size_t len;\n"
         "    uint64_t dirty[LUMINA_TRANSFORM_SEQUENCE_MASK_WORDS];\n"
+        "    uint64_t observed_mandatory[CRS_SHORT_RULE_MASK_DIMS];\n"
+        "    uint64_t transform_dirty_rules[CRS_SHORT_RULE_MASK_DIMS];\n"
+        "    uint64_t observed_seed_rules[CRS_SHORT_RULE_MASK_DIMS];\n"
+        "    uint64_t observed_context_rules[CRS_SHORT_RULE_MASK_DIMS];\n"
+        "    uint64_t observed_bytes[4];\n"
+        "    uint8_t collected_shared;\n"
+        "    uint8_t collected_context;\n"
+        "    uint8_t proof_cohort;\n"
+        "    uint8_t repetitive;\n"
         "    uint8_t valid;\n"
         "} LuminaTransformInputClass;\n"
         "typedef struct {\n"
         "    LuminaTransformViewCache views[LUMINA_TRANSFORM_VIEW_SLOTS];\n"
         "    LuminaTransformInputClass input;\n"
+        "    LuminaMultiMatchPrefixDagCache multimatch_prefix_dag;\n"
+        "#if defined(LUMINA_ENABLE_9341XX_SHARED_BASE64)\n"
+        "    LuminaMultiMatchBase64Cache multimatch_base64;\n"
+        "#endif\n"
         "} LuminaTransformDispatchWorkspace;\n"
         "static __thread LuminaTransformDispatchWorkspace g_transform_dispatch_workspace;\n"
         "static __attribute__((noinline)) LuminaTransformDispatchWorkspace *\n"
@@ -8243,23 +11081,243 @@ def main():
         "    for (size_t i = 0; i < LUMINA_TRANSFORM_VIEW_SLOTS; ++i)\n"
         "        workspace->views[i].valid = 0;\n"
         "    workspace->input.valid = 0;\n"
+        "    workspace->multimatch_prefix_dag.valid = 0;\n"
+        "#if defined(LUMINA_ENABLE_9341XX_SHARED_BASE64)\n"
+        "    workspace->multimatch_base64.valid = 0;\n"
+        "#endif\n"
+        "}\n\n"
+        "#if defined(LUMINA_DATAPLANE_DIAGNOSTICS)\n"
+        "static inline int lumina_call_exact_verifier(\n"
+        "        int idx, const unsigned char *data, size_t len,\n"
+        "        size_t offset, int transformed) {\n"
+        "    size_t subject_bytes = offset <= len ? len - offset : 0;\n"
+        "    luminawaf_dataplane_record_exact_verifier(\n"
+        "        (unsigned)idx, subject_bytes, transformed);\n"
+        "    return g_short_rule_table[idx](data, len, offset);\n"
+        "}\n\n"
+        "static inline void lumina_transform_copy(\n"
+        "        void *destination, const void *source, size_t bytes) {\n"
+        "    memcpy(destination, source, bytes);\n"
+        "    luminawaf_dataplane_record_transform_copy(bytes);\n"
+        "}\n\n"
+        "static inline void lumina_record_transform_view(\n"
+        "        size_t input_len, size_t output_len) {\n"
+        "    luminawaf_dataplane_record_transform_view(input_len, output_len);\n"
+        "}\n\n"
+        "static inline void lumina_record_transform_cache_hit(size_t bytes) {\n"
+        "    luminawaf_dataplane_record_transform_cache_hit(bytes);\n"
+        "}\n\n"
+        "#else\n"
+        "#define lumina_call_exact_verifier(idx, data, len, offset, transformed) \\\n"
+        "    g_short_rule_table[(idx)]((data), (len), (offset))\n"
+        "#define lumina_transform_copy(destination, source, bytes) \\\n"
+        "    memcpy((destination), (source), (bytes))\n"
+        "#define lumina_record_transform_view(input_len, output_len) \\\n"
+        "    do { (void)0; } while (0)\n"
+        "#define lumina_record_transform_cache_hit(bytes) \\\n"
+        "    do { (void)0; } while (0)\n"
+        "#endif\n\n"
+    ) + TRANSFORM_INPUT_SCAN_SRC + (
+        "static inline void lumina_classify_transform_input_cohort(\n"
+        "        LuminaTransformInputClass *input,\n"
+        "        const unsigned char *data, size_t len,\n"
+        "        int collect_shared, int collect_context,\n"
+        "        uint8_t proof_cohort) {\n"
+        "    if (input->valid && input->data == data && input->len == len &&\n"
+        "        input->proof_cohort == proof_cohort &&\n"
+        "        (!collect_shared || input->collected_shared) &&\n"
+        "        (!collect_context || input->collected_context)) return;\n"
+        "    for (size_t word = 0; word < LUMINA_TRANSFORM_SEQUENCE_MASK_WORDS; ++word)\n"
+        "        input->dirty[word] = g_transform_sequence_always_dirty[word];\n"
+        "    for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word) {\n"
+        "        input->observed_mandatory[word] = 0;\n"
+        "        input->transform_dirty_rules[word] = 0;\n"
+        "        input->observed_seed_rules[word] = 0;\n"
+        "        input->observed_context_rules[word] = 0;\n"
+        "    }\n"
+        "    for (size_t word = 0; word < 4; ++word)\n"
+        "        input->observed_bytes[word] = 0;\n"
+        "    int repetitive = 0;\n"
+        "#if !defined(LUMINA_DISABLE_SEED_GRAM_CACHE)\n"
+        "    repetitive = len >= 4096 &&\n"
+        "        lumina_seed_gram_cache_profitable(data, len);\n"
+        "#endif\n"
+        "    if (proof_cohort == LUMINA_PROOF_COHORT_REQUEST_BODY) {\n"
+        "#if !defined(LUMINA_DISABLE_COMBINED_SEED_PROOF_AC)\n"
+        "        lumina_classify_request_body_seed_proofs_ac(\n"
+        "            input->observed_bytes, input->observed_seed_rules,\n"
+        "            input->observed_context_rules, data, len,\n"
+        "            collect_shared, collect_context);\n"
+        "#else\n"
+        "        lumina_classify_transform_input_plain(\n"
+        "            input, data, len, collect_shared, collect_context);\n"
+        "#endif\n"
+        "    } else {\n"
+        "#if !defined(LUMINA_DISABLE_SEED_GRAM_CACHE)\n"
+        "        if (repetitive)\n"
+        "        lumina_classify_transform_input_cached(\n"
+        "            input, data, len, collect_shared, collect_context);\n"
+        "        else\n"
+        "#endif\n"
+        "#if !defined(LUMINA_DISABLE_COMBINED_SEED_PROOF_AC)\n"
+        "        lumina_classify_seed_proofs_ac(\n"
+        "            input->observed_bytes, input->observed_seed_rules,\n"
+        "            input->observed_context_rules, data, len,\n"
+        "            collect_shared, collect_context);\n"
+        "#else\n"
+        "        lumina_classify_transform_input_plain(\n"
+        "            input, data, len, collect_shared, collect_context);\n"
+        "#endif\n"
+        "    }\n"
+        "    for (size_t byte_word = 0; byte_word < 4; ++byte_word) {\n"
+        "        uint64_t present = input->observed_bytes[byte_word];\n"
+        "        while (present) {\n"
+        "            unsigned bit = (unsigned)__builtin_ctzll(present);\n"
+        "            unsigned byte = (unsigned)(byte_word * 64u + bit);\n"
+        "            present &= present - 1;\n"
+        "            const uint64_t *byte_dirty =\n"
+        "                g_transform_sequence_dirty_by_byte[byte];\n"
+        "            const uint64_t *byte_rules =\n"
+        "                g_short_rule_mandatory_byte_mask[byte];\n"
+        "            for (size_t word = 0;\n"
+        "                 word < LUMINA_TRANSFORM_SEQUENCE_MASK_WORDS; ++word)\n"
+        "                input->dirty[word] |= byte_dirty[word];\n"
+        "            for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word)\n"
+        "                input->observed_mandatory[word] |= byte_rules[word];\n"
+        "        }\n"
+        "    }\n"
+        "    for (unsigned idx = 0; idx < LUMINA_SHORT_RULE_COUNT; ++idx) {\n"
+        "        uint8_t sequence_id = g_rule_transform_seq_id[idx];\n"
+        "        if (input->dirty[sequence_id >> 6] &\n"
+        "            (UINT64_C(1) << (sequence_id & 63)))\n"
+        "            input->transform_dirty_rules[idx >> 6] |=\n"
+        "                UINT64_C(1) << (idx & 63);\n"
+        "    }\n"
+        "    input->data = data;\n"
+        "    input->len = len;\n"
+        "    input->collected_shared = collect_shared != 0;\n"
+        "    input->collected_context = collect_context != 0;\n"
+        "    input->proof_cohort = proof_cohort;\n"
+        "    input->repetitive = repetitive != 0;\n"
+        "    input->valid = 1;\n"
+        "}\n\n"
+        "static inline void lumina_classify_transform_input(\n"
+        "        LuminaTransformInputClass *input,\n"
+        "        const unsigned char *data, size_t len,\n"
+        "        int collect_shared, int collect_context) {\n"
+        "    uint8_t proof_cohort = LUMINA_PROOF_COHORT_GLOBAL;\n"
+        "    if (!collect_shared && !collect_context && input->valid &&\n"
+        "        input->data == data && input->len == len)\n"
+        "        proof_cohort = input->proof_cohort;\n"
+        "    lumina_classify_transform_input_cohort(\n"
+        "        input, data, len, collect_shared, collect_context,\n"
+        "        proof_cohort);\n"
         "}\n\n"
         "static inline int lumina_transform_sequence_may_change(\n"
         "        LuminaTransformInputClass *input, uint8_t sequence_id,\n"
         "        const unsigned char *data, size_t len) {\n"
-        "    if (!input->valid || input->data != data || input->len != len) {\n"
-        "        for (size_t word = 0; word < LUMINA_TRANSFORM_SEQUENCE_MASK_WORDS; ++word)\n"
-        "            input->dirty[word] = g_transform_sequence_always_dirty[word];\n"
-        "        for (size_t i = 0; i < len; ++i) {\n"
-        "            const uint64_t *byte_dirty = g_transform_sequence_dirty_by_byte[data[i]];\n"
-        "            for (size_t word = 0; word < LUMINA_TRANSFORM_SEQUENCE_MASK_WORDS; ++word)\n"
-        "                input->dirty[word] |= byte_dirty[word];\n"
-        "        }\n"
-        "        input->data = data;\n"
-        "        input->len = len;\n"
-        "        input->valid = 1;\n"
-        "    }\n"
+        "    lumina_classify_transform_input(input, data, len, 0, 0);\n"
         "    return (input->dirty[sequence_id >> 6] >> (sequence_id & 63)) & 1u;\n"
+        "}\n\n"
+        "static inline void lumina_filter_identity_mandatory_candidates_cohort(\n"
+        "        const unsigned char *data, size_t len,\n"
+        "        uint64_t *pos0, uint64_t *posN,\n"
+        "        uint64_t *transform_dirty_rules, uint8_t *value_flags,\n"
+        "        uint8_t proof_cohort) {\n"
+        "    if (value_flags) *value_flags = 0;\n"
+        "    if (!data || !pos0 || !posN || !transform_dirty_rules) return;\n"
+        "    for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word)\n"
+        "        transform_dirty_rules[word] = UINT64_MAX;\n"
+        "    if (len < 64) return;\n"
+        "    int collect_shared = 0;\n"
+        "    int collect_context = 0;\n"
+        "    for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word) {\n"
+        "        uint64_t active = pos0[word] | posN[word];\n"
+        "#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE)\n"
+        "        collect_shared |= (active & g_shared_seed_rule_mask[word]) != 0;\n"
+        "#endif\n"
+        "#if !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)\n"
+        "        collect_context |= (active & g_context_seed_rule_mask[word]) != 0;\n"
+        "#endif\n"
+        "    }\n"
+        "    LuminaTransformDispatchWorkspace *workspace =\n"
+        "        lumina_acquire_transform_dispatch_workspace();\n"
+        "    lumina_classify_transform_input_cohort(\n"
+        "        &workspace->input, data, len, collect_shared, collect_context,\n"
+        "        proof_cohort);\n"
+        "    if (value_flags && workspace->input.repetitive)\n"
+        "        *value_flags |= LUMINA_VALUE_REPETITIVE;\n"
+        "    for (size_t word = 0; word < CRS_SHORT_RULE_MASK_DIMS; ++word) {\n"
+        "        transform_dirty_rules[word] =\n"
+        "            workspace->input.transform_dirty_rules[word];\n"
+        "        uint64_t absent = (pos0[word] | posN[word]) &\n"
+        "            g_short_rule_mandatory_byte_rules[word] &\n"
+        "            ~workspace->input.observed_mandatory[word];\n"
+        "        while (absent) {\n"
+        "            unsigned bit = (unsigned)__builtin_ctzll(absent);\n"
+        "            unsigned idx = (unsigned)(word * 64u + bit);\n"
+        "            uint64_t rule_bit = UINT64_C(1) << bit;\n"
+        "            absent &= absent - 1;\n"
+        "            if (idx >= LUMINA_SHORT_RULE_COUNT) continue;\n"
+        "            uint8_t sequence_id = g_rule_transform_seq_id[idx];\n"
+        "            if ((workspace->input.dirty[sequence_id >> 6] &\n"
+        "                 (UINT64_C(1) << (sequence_id & 63))) == 0) {\n"
+        "                pos0[word] &= ~rule_bit;\n"
+        "                posN[word] &= ~rule_bit;\n"
+        "            }\n"
+        "        }\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "        uint64_t alphabet_candidates =\n"
+        "            (pos0[word] | posN[word]) & g_alphabet_rule_mask[word];\n"
+        "        while (alphabet_candidates) {\n"
+        "            unsigned bit = (unsigned)__builtin_ctzll(alphabet_candidates);\n"
+        "            unsigned idx = (unsigned)(word * 64u + bit);\n"
+        "            uint64_t rule_bit = UINT64_C(1) << bit;\n"
+        "            alphabet_candidates &= alphabet_candidates - 1;\n"
+        "            if (idx >= LUMINA_SHORT_RULE_COUNT) continue;\n"
+        "            uint8_t sequence_id = g_rule_transform_seq_id[idx];\n"
+        "            if ((workspace->input.dirty[sequence_id >> 6] &\n"
+        "                 (UINT64_C(1) << (sequence_id & 63))) == 0 &&\n"
+        "                !lumina_alphabet_rule_possible(\n"
+        "                    idx, workspace->input.observed_bytes)) {\n"
+        "                pos0[word] &= ~rule_bit;\n"
+        "                posN[word] &= ~rule_bit;\n"
+        "            }\n"
+        "        }\n"
+        "#endif\n"
+        "#if !defined(LUMINA_DISABLE_SHARED_SEED_GATE)\n"
+        "        uint64_t missing_seed =\n"
+        "            (pos0[word] | posN[word]) & g_shared_seed_rule_mask[word] &\n"
+        "            ~workspace->input.observed_seed_rules[word] &\n"
+        "            ~workspace->input.transform_dirty_rules[word];\n"
+        "        pos0[word] &= ~missing_seed;\n"
+        "        posN[word] &= ~missing_seed;\n"
+        "#endif\n"
+        "#if !defined(LUMINA_DISABLE_CONTEXTUAL_SEED_GATE)\n"
+        "        uint64_t missing_context =\n"
+        "            (pos0[word] | posN[word]) & g_context_seed_rule_mask[word] &\n"
+        "            ~workspace->input.observed_context_rules[word] &\n"
+        "            ~workspace->input.transform_dirty_rules[word];\n"
+        "        pos0[word] &= ~missing_context;\n"
+        "        posN[word] &= ~missing_context;\n"
+        "#endif\n"
+        "    }\n"
+        "}\n\n"
+        "void lumina_filter_identity_mandatory_candidates(\n"
+        "        const unsigned char *data, size_t len,\n"
+        "        uint64_t *pos0, uint64_t *posN,\n"
+        "        uint64_t *transform_dirty_rules, uint8_t *value_flags) {\n"
+        "    lumina_filter_identity_mandatory_candidates_cohort(\n"
+        "        data, len, pos0, posN, transform_dirty_rules, value_flags,\n"
+        "        LUMINA_PROOF_COHORT_GLOBAL);\n"
+        "}\n\n"
+        "void lumina_filter_request_body_identity_mandatory_candidates(\n"
+        "        const unsigned char *data, size_t len,\n"
+        "        uint64_t *pos0, uint64_t *posN,\n"
+        "        uint64_t *transform_dirty_rules, uint8_t *value_flags) {\n"
+        "    lumina_filter_identity_mandatory_candidates_cohort(\n"
+        "        data, len, pos0, posN, transform_dirty_rules, value_flags,\n"
+        "        LUMINA_PROOF_COHORT_REQUEST_BODY);\n"
         "}\n\n"
         "static inline int rule_is_anywhere_p(int idx) {\n"
         "    if (!g_anywhere_p_init) {\n"
@@ -8273,26 +11331,129 @@ def main():
         "    }\n"
         "    return g_anywhere_p[idx];\n"
         "}\n\n"
+        "static inline int lumina_transform_may_change_at_equal_length(\n"
+        "        LuminaTransformId transform) {\n"
+        "    switch (transform) {\n"
+        "    case LUMINA_T_LOWERCASE:\n"
+        "    case LUMINA_T_URL_DECODE:\n"
+        "    case LUMINA_T_URL_DECODE_UNI:\n"
+        "    case LUMINA_T_COMPRESS_WS:\n"
+        "    case LUMINA_T_NORMALIZE_PATH:\n"
+        "    case LUMINA_T_NORMALIZE_PATH_WIN:\n"
+        "    case LUMINA_T_CMDLINE:\n"
+        "    case LUMINA_T_LENGTH:\n"
+        "        return 1;\n"
+        "    default:\n"
+        "        return 0;\n"
+        "    }\n"
+        "}\n\n"
+        "static inline int lumina_search_exact_offsets(\n"
+        "        int idx, const unsigned char *data, size_t len,\n"
+        "        int transformed) {\n"
+        "    int (*prefix_gate)(const unsigned char *, size_t, size_t) =\n"
+        "        g_short_rule_prefix4_gate[idx];\n"
+        "    if (len == 0)\n"
+        "        return lumina_call_exact_verifier(\n"
+        "            idx, data, len, 0, transformed);\n"
+        "    const size_t word = (unsigned)idx >> 6;\n"
+        "    const uint64_t rule_bit = UINT64_C(1) << (idx & 63);\n"
+        "    for (size_t offset = 0; offset < len; ++offset) {\n"
+        "        if ((g_short_rule_transform_search_mask[data[offset]][word] &\n"
+        "             rule_bit) == 0) continue;\n"
+        "        if (prefix_gate && !prefix_gate(data, len, offset)) continue;\n"
+        "        int rule_id = lumina_call_exact_verifier(\n"
+        "            idx, data, len, offset, transformed);\n"
+        "        if (rule_id) return rule_id;\n"
+        "    }\n"
+        "    return 0;\n"
+        "}\n\n"
+    ) + MULTIMATCH_PREFIX_DAG_SRC + MULTIMATCH_SHARED_BASE64_SRC + (
         "int lumina_dispatch_rule(int idx, const unsigned char *data, size_t len, size_t offset) {\n"
         "    const LuminaTransformId *seq = g_rule_transform_seq[idx];\n"
-        "    if (seq[0] == LUMINA_T_NONE) return g_short_rule_table[idx](data, len, offset);\n"
+        "    if (seq[0] == LUMINA_T_NONE)\n"
+        "        return lumina_call_exact_verifier(idx, data, len, offset, 0);\n"
+        "    const bool transform_search = g_short_rule_transform_search[idx];\n"
         "    LuminaTransformDispatchWorkspace *workspace =\n"
         "        lumina_acquire_transform_dispatch_workspace();\n"
         "    const uint8_t sequence_id = g_rule_transform_seq_id[idx];\n"
         "    if (!lumina_transform_sequence_may_change(\n"
         "            &workspace->input, sequence_id, data, len))\n"
-        "        return g_short_rule_table[idx](data, len, offset);\n"
+        "        return transform_search\n"
+        "            ? lumina_search_exact_offsets(idx, data, len, 0)\n"
+        "            : lumina_call_exact_verifier(\n"
+        "                idx, data, len, offset, 0);\n"
         "    const size_t context_start = offset > 32 ? offset - 32 : 0;\n"
         "    const size_t raw_prefix = offset - context_start;\n"
         "    size_t n = len - context_start; size_t transformed_offset = 0;\n"
         "    const size_t cache_slot = sequence_id & (LUMINA_TRANSFORM_VIEW_SLOTS - 1u);\n"
         "    LuminaTransformViewCache *cache = &workspace->views[cache_slot];\n"
         "    uint8_t *s = lumina_xform_scratch_slot(cache_slot);\n"
-        "    if (n > lumina_xform_scratch_cap()) return g_short_rule_table[idx](data, len, offset);\n"
+        "    if (n > lumina_xform_scratch_cap())\n"
+        "        return transform_search\n"
+        "            ? lumina_search_exact_offsets(idx, data, len, 0)\n"
+        "            : lumina_call_exact_verifier(\n"
+        "                idx, data, len, offset, 0);\n"
         "    if (g_short_rule_multimatch[idx]) {\n"
+    ) + MULTIMATCH_PREFIX_DAG_DISPATCH + (
         "        cache->valid = 0;\n"
-        "        int r = g_short_rule_table[idx](data, len, offset);\n"
+        "        int r = 0;\n"
+        "        if (transform_search) {\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "            if (lumina_alphabet_rule_possible(\n"
+        "                    idx, workspace->input.observed_bytes))\n"
+        "                r = lumina_search_exact_offsets(idx, data, len, 0);\n"
+        "#else\n"
+        "            r = lumina_search_exact_offsets(idx, data, len, 0);\n"
+        "#endif\n"
+        "            if (r) return r;\n"
+        "            lumina_transform_copy(s, data, len);\n"
+        "            n = len;\n"
+        "#if !defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY) && \\\n"
+        "    !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)\n"
+        "            LuminaTransformFeatures transform_features;\n"
+        "            lumina_transform_features_init(\n"
+        "                &transform_features, workspace->input.observed_bytes);\n"
+        "#endif\n"
+        "            for (int i = 0; i < 12 && seq[i] != LUMINA_T_NONE; ++i) {\n"
+        "#if !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)\n"
+        "#if defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY)\n"
+        "                if (!lumina_transform_step_may_change(\n"
+        "                        seq[i], s, n)) continue;\n"
+        "#else\n"
+        "                if (!lumina_transform_features_may_change(\n"
+        "                        &transform_features, seq[i])) continue;\n"
+        "#endif\n"
+        "#endif\n"
+        "                size_t previous_n = n;\n"
+        "#if !defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY) && \\\n"
+        "    !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)\n"
+        "                n = lumina_apply_transform_step_features(\n"
+        "                    seq[i], s, n, &transform_features);\n"
+        "#else\n"
+        "                n = lumina_apply_transform_step(seq[i], s, n);\n"
+        "#endif\n"
+        "                bool view_changed = n != previous_n ||\n"
+        "                    lumina_transform_may_change_at_equal_length(seq[i]);\n"
+        "                if (!view_changed) continue;\n"
+        "                lumina_record_transform_view(previous_n, n);\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "                if (!lumina_alphabet_view_possible(idx, s, n)) continue;\n"
+        "#endif\n"
+        "                r = lumina_search_exact_offsets(idx, s, n, 1);\n"
+        "                if (r) return r;\n"
+        "            }\n"
+        "            return 0;\n"
+        "        }\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "        if (lumina_alphabet_rule_possible(\n"
+        "                idx, workspace->input.observed_bytes))\n"
+        "            r = lumina_call_exact_verifier(\n"
+        "                idx, data, len, offset, 0);\n"
+        "#else\n"
+        "        r = lumina_call_exact_verifier(idx, data, len, offset, 0);\n"
+        "#endif\n"
         "        if (r) return r;\n"
+        "#if defined(LUMINA_DISABLE_INCREMENTAL_MULTIMATCH)\n"
         "        for (int i = 0; i < 12 && seq[i] != LUMINA_T_NONE; i++) {\n"
         "            LuminaTransformId sub_seq[12];\n"
         "            for (int j = 0; j <= i; j++) sub_seq[j] = seq[j];\n"
@@ -8300,7 +11461,8 @@ def main():
         "            n = len - context_start; transformed_offset = 0;\n"
         "            bool cmdline_boundary_fold = false;\n"
         "            if (raw_prefix > 0) {\n"
-        "                memcpy(s, data + context_start, raw_prefix);\n"
+        "                lumina_transform_copy(\n"
+        "                    s, data + context_start, raw_prefix);\n"
         "                transformed_offset = lumina_apply_transforms(sub_seq, s, raw_prefix);\n"
         "                for (int j = 0; j <= i; j++) {\n"
         "                    if (sub_seq[j] == LUMINA_T_CMDLINE && transformed_offset > 0 &&\n"
@@ -8311,25 +11473,101 @@ def main():
         "                    }\n"
         "                }\n"
         "            }\n"
-        "            memcpy(s, data + context_start, n);\n"
+        "            lumina_transform_copy(s, data + context_start, n);\n"
         "            n = lumina_apply_transforms(sub_seq, s, n);\n"
+        "            lumina_record_transform_view(\n"
+        "                len - context_start, n);\n"
         "            transformed_offset -= cmdline_boundary_fold;\n"
         "            if (transformed_offset <= n) {\n"
-        "                r = g_short_rule_table[idx](s, n, transformed_offset);\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "                if (!lumina_alphabet_view_possible(idx, s, n)) continue;\n"
+        "#endif\n"
+        "                r = lumina_call_exact_verifier(\n"
+        "                    idx, s, n, transformed_offset, 1);\n"
         "                if (r) return r;\n"
         "            }\n"
         "        }\n"
+        "#else\n"
+        "        /* multiMatch observes raw input and every cumulative transform\n"
+        "         * prefix. Advance one mutable view instead of rebuilding all\n"
+        "         * prefixes from raw input, reducing k transforms from O(k^2)\n"
+        "         * full-buffer passes to O(k). */\n"
+        "        uint8_t prefix_view[128];\n"
+        "        size_t prefix_len = raw_prefix;\n"
+        "        bool cmdline_seen = false;\n"
+        "        if (raw_prefix > 0)\n"
+        "            lumina_transform_copy(\n"
+        "                prefix_view, data + context_start, raw_prefix);\n"
+        "        lumina_transform_copy(s, data + context_start, n);\n"
+        "#if !defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY) && \\\n"
+        "    !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)\n"
+        "        LuminaTransformFeatures transform_features;\n"
+        "        lumina_transform_features_init(\n"
+        "            &transform_features, workspace->input.observed_bytes);\n"
+        "#endif\n"
+        "        for (int i = 0; i < 12 && seq[i] != LUMINA_T_NONE; i++) {\n"
+        "#if !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)\n"
+        "#if defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY)\n"
+        "            if (!lumina_transform_step_may_change(\n"
+        "                    seq[i], s, n)) continue;\n"
+        "#else\n"
+        "            if (!lumina_transform_features_may_change(\n"
+        "                    &transform_features, seq[i])) continue;\n"
+        "#endif\n"
+        "#endif\n"
+        "            LuminaTransformId step_seq[2] = {seq[i], LUMINA_T_NONE};\n"
+        "            size_t previous_n = n;\n"
+        "            if (raw_prefix > 0)\n"
+        "                prefix_len = lumina_apply_transforms(\n"
+        "                    step_seq, prefix_view, prefix_len);\n"
+        "#if !defined(LUMINA_DISABLE_MULTIMATCH_FEATURE_CARRY) && \\\n"
+        "    !defined(LUMINA_DISABLE_TRANSFORM_IDENTITY_PROOFS)\n"
+        "            n = lumina_apply_transform_step_features(\n"
+        "                seq[i], s, n, &transform_features);\n"
+        "#else\n"
+        "            n = lumina_apply_transforms(step_seq, s, n);\n"
+        "#endif\n"
+        "            bool view_changed = n != previous_n ||\n"
+        "                lumina_transform_may_change_at_equal_length(seq[i]);\n"
+        "            if (view_changed)\n"
+        "                lumina_record_transform_view(previous_n, n);\n"
+        "            if (seq[i] == LUMINA_T_CMDLINE) cmdline_seen = true;\n"
+        "            transformed_offset = prefix_len;\n"
+        "            if (cmdline_seen && transformed_offset > 0 &&\n"
+        "                prefix_view[transformed_offset - 1] == ' ' &&\n"
+        "                (data[offset] == '/' || data[offset] == '('))\n"
+        "                transformed_offset--;\n"
+        "            if (view_changed && transformed_offset <= n) {\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "                if (!lumina_alphabet_view_possible(idx, s, n)) continue;\n"
+        "#endif\n"
+        "                r = lumina_call_exact_verifier(\n"
+        "                    idx, s, n, transformed_offset, 1);\n"
+        "                if (r) return r;\n"
+        "            }\n"
+        "        }\n"
+        "#endif\n"
         "        return 0;\n"
         "    }\n"
         "    if (cache->valid && cache->data == data && cache->len == len &&\n"
         "        cache->offset == offset && cache->sequence_id == sequence_id) {\n"
-        "        return g_short_rule_table[idx](\n"
-        "            s, cache->transformed_len, cache->transformed_offset);\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "        if (!lumina_alphabet_view_possible(\n"
+        "                idx, s, cache->transformed_len)) return 0;\n"
+        "#endif\n"
+        "        lumina_record_transform_cache_hit(cache->transformed_len);\n"
+        "        return transform_search\n"
+        "            ? lumina_search_exact_offsets(\n"
+        "                idx, s, cache->transformed_len, 1)\n"
+        "            : lumina_call_exact_verifier(\n"
+        "                idx, s, cache->transformed_len,\n"
+        "                cache->transformed_offset, 1);\n"
         "    }\n"
         "    cache->valid = 0;\n"
         "    bool cmdline_boundary_fold = false;\n"
         "    if (raw_prefix > 0) {\n"
-        "        memcpy(s, data + context_start, raw_prefix);\n"
+        "        lumina_transform_copy(\n"
+        "            s, data + context_start, raw_prefix);\n"
         "        transformed_offset = lumina_apply_transforms(seq, s, raw_prefix);\n"
         "        for (int i = 0; i < 12 && seq[i] != LUMINA_T_NONE; i++) {\n"
         "            if (seq[i] == LUMINA_T_CMDLINE && transformed_offset > 0 &&\n"
@@ -8340,8 +11578,10 @@ def main():
         "            }\n"
         "        }\n"
         "    }\n"
-        "    memcpy(s, data + context_start, n);\n"
+        "    lumina_transform_copy(s, data + context_start, n);\n"
+        "    const size_t raw_view_len = n;\n"
         "    n = lumina_apply_transforms(seq, s, n);\n"
+        "    lumina_record_transform_view(raw_view_len, n);\n"
         "    transformed_offset -= cmdline_boundary_fold;\n"
         "    if (transformed_offset > n) return 0;\n"
         "    cache->data = data;\n"
@@ -8351,20 +11591,65 @@ def main():
         "    cache->transformed_offset = transformed_offset;\n"
         "    cache->sequence_id = sequence_id;\n"
         "    cache->valid = 1;\n"
-        "    return g_short_rule_table[idx](s, n, transformed_offset);\n"
+        "#if !defined(LUMINA_DISABLE_ALPHABET_GATE)\n"
+        "    if (!lumina_alphabet_view_possible(idx, s, n)) return 0;\n"
+        "#endif\n"
+        "    return transform_search\n"
+        "        ? lumina_search_exact_offsets(idx, s, n, 1)\n"
+        "        : lumina_call_exact_verifier(\n"
+        "            idx, s, n, transformed_offset, 1);\n"
         "}\n\n"
     )
+    DISPATCH_SRC += MULTIMATCH_SHARED_BASE64_LONG_ENTRY
     tables_code = "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#include \"generated/crs_short_rules.h\"\n#include \"luminawaf.h\"\n\n"
+    tables_code += shared_seed_gate_src
+    tables_code += contextual_seed_gate_src
+    tables_code += alphabet_gate_src
     tables_code += DISPATCH_SRC
     tables_code += "extern int lumina_scan_rule_0(const unsigned char*,size_t,size_t);\n"
     for r in detection:
         tables_code += f"extern int lumina_scan_rule_{r['id']}(const unsigned char*,size_t,size_t);\n"
+        if r.get('_prefix4_gate'):
+            tables_code += (
+                f"extern int lumina_prefix4_rule_{r['id']}("
+                "const unsigned char*,size_t,size_t);\n")
     for safe in pm_scanners:
         tables_code += f"extern int lumina_pm_{safe}(const unsigned char*,size_t);\n"
     tables_code += f"\nconst uint64_t g_short_rule_mask[256][{NWORDS}] = {{\n"
     for i in range(256):
         cols = ", ".join(f"0x{mask[i][w]:016x}ULL" for w in range(NWORDS))
         tables_code += f"    {{{cols}}},\n"
+    tables_code += "};\n\n"
+    tables_code += (
+        f"const uint64_t g_short_rule_transform_search_mask"
+        f"[256][{NWORDS}] = {{\n")
+    for i in range(256):
+        cols = ", ".join(
+            f"0x{transform_search_mask[i][w]:016x}ULL"
+            for w in range(NWORDS))
+        tables_code += f"    {{{cols}}},\n"
+    tables_code += "};\n\n"
+    tables_code += (
+        f"const uint64_t g_short_rule_transform_search_rules[{NWORDS}] = "
+        f"{emit_word_array(transform_search_rules)};\n\n")
+    tables_code += (
+        f"const uint64_t g_short_rule_mandatory_byte_mask[256][{NWORDS}] = {{\n")
+    for i in range(256):
+        cols = ", ".join(
+            f"0x{mandatory_byte_mask[i][w]:016x}ULL" for w in range(NWORDS))
+        tables_code += f"    {{{cols}}},\n"
+    tables_code += "};\n\n"
+    tables_code += (
+        f"const uint64_t g_short_rule_mandatory_byte_rules[{NWORDS}] = "
+        f"{emit_word_array(mandatory_byte_rules)};\n\n")
+    tables_code += (
+        f"const {prefix2_class_type} g_short_rule_prefix2_class[65536] = {{\n"
+        f"{emit_scalar_rows(prefix2_class_map)}\n"
+        "};\n\n"
+        f"const uint64_t g_short_rule_prefix2_reject[{len(prefix2_classes)}]"
+        f"[{NWORDS}] = {{\n")
+    for reject_words in prefix2_classes:
+        tables_code += f"    {emit_word_array(reject_words)},\n"
     tables_code += "};\n\n"
     tables_code += f"const uint64_t g_short_rule_anywhere_mask[{NWORDS}] = {emit_word_array(anywhere_mask)};\n\n"
     tables_code += f"const uint64_t g_short_rule_empty_mask[{NWORDS}] = {emit_word_array(empty_mask)};\n\n"
@@ -8402,6 +11687,9 @@ def main():
     tables_code += f"const uint64_t g_short_rule_collection_mask[{n}] = {{\n" + "\n".join(collection_entries) + "\n};\n"
     tables_code += f"const uint8_t g_short_rule_category[{n}] = {{\n" + "\n".join(cat_entries) + "\n};\n"
     tables_code += f"const bool g_short_rule_multimatch[{n}] = {{\n" + "\n".join(multimatch_entries) + "\n};\n"
+    tables_code += (
+        f"const bool g_short_rule_transform_search[{n}] = {{\n" +
+        "\n".join(transform_search_entries) + "\n};\n")
     tables_code += f"const uint8_t g_short_rule_paranoia[{n}] = {{\n" + "\n".join(par_entries) + "\n};\n"
     tables_code += f"const uint16_t g_short_rule_var_type[{n}] = {{\n" + "\n".join(vt_entries) + "\n};\n"
     tables_code += f"const uint32_t g_short_rule_hdr_mask[{n}] = {{\n" + "\n".join(hdr_entries) + "\n};\n"
@@ -8409,9 +11697,18 @@ def main():
     tables_code += f"const int g_short_rule_id[{n}] = {{\n" + "\n".join(rule_id_entries) + "\n};\n"
     tables_code += f"const uint8_t g_short_rule_shared_router[{n}] = {{\n" + "\n".join(shared_router_entries) + "\n};\n"
     tables_code += f"int (*g_short_rule_table[{n}])(const unsigned char*,size_t,size_t) = {{\n" + "\n".join(table_entries) + "\n};\n"
-    shared_router_count = shared_call_stats['routers']
+    prefix4_entries = [
+        (f"    lumina_prefix4_rule_{r['id']}," if r.get('_prefix4_gate')
+         else "    NULL,")
+        for r in detection
+    ]
+    tables_code += (
+        f"int (*const g_short_rule_prefix4_gate[{n}])("
+        "const unsigned char*,size_t,size_t) = {\n" +
+        "\n".join(prefix4_entries) + "\n};\n")
     shared_router_masks = [[0] * NWORDS for _ in range(shared_router_count)]
     shared_router_members = [[] for _ in range(shared_router_count)]
+    shared_router_repetitive_fallback = [False] * shared_router_count
     for idx, rule in enumerate(detection):
         if '_shared_router' not in rule:
             continue
@@ -8419,6 +11716,8 @@ def main():
         local_bit = int(rule['_shared_router_bit'])
         shared_router_masks[router][idx >> 6] |= 1 << (idx & 63)
         shared_router_members[router].append((idx, local_bit))
+        shared_router_repetitive_fallback[router] |= bool(
+            rule.get('_shared_router_repetitive_fallback'))
     if shared_router_count:
         tables_code += (
             f"const uint64_t g_shared_router_rule_mask[{shared_router_count}]"
@@ -8430,13 +11729,77 @@ def main():
             tables_code += (
                 f"extern uint64_t lumina_shared_call_router_{router}_match("
                 "const unsigned char*,size_t,size_t,uint64_t);\n")
+            if shared_router_repetitive_fallback[router]:
+                tables_code += (
+                    f"extern void lumina_dispatch_shared_exact_router_{router}("
+                    "const unsigned char*,size_t,size_t,const uint64_t*,"
+                    "uint64_t*,uint8_t);\n")
         tables_code += (
             "\nvoid lumina_dispatch_shared_router(int router_id, "
             "const unsigned char *data, size_t len, size_t offset, "
-            "const uint64_t *wanted, uint64_t *matched) {\n"
+            "const uint64_t *wanted, uint64_t *matched, "
+            "uint8_t value_flags) {\n"
             f"    for (int word = 0; word < {NWORDS}; ++word) matched[word] = 0;\n"
             "    switch (router_id) {\n")
         for router, members in enumerate(shared_router_members):
+            if shared_router_repetitive_fallback[router]:
+                tables_code += (
+                    f"    case {router}:\n"
+                    f"        lumina_dispatch_shared_exact_router_{router}("
+                    "data, len, offset, wanted, matched, value_flags);\n"
+                    "        break;\n")
+                adapter = [
+                    f"void lumina_dispatch_shared_exact_router_{router}(",
+                    "        const unsigned char *data, size_t len, size_t offset,",
+                    "        const uint64_t *wanted, uint64_t *matched,",
+                    "        uint8_t value_flags) {",
+                    "    uint64_t local_wanted = 0;",
+                ]
+                for idx, local_bit in members:
+                    adapter.append(
+                        f"    if (wanted[{idx >> 6}] & "
+                        f"(UINT64_C(1) << {idx & 63})) "
+                        f"local_wanted |= UINT64_C(1) << {local_bit};")
+                adapter.append(
+                    "    if (value_flags & LUMINA_VALUE_REPETITIVE) {")
+                for idx, _ in members:
+                    adapter.extend([
+                        "#if defined(LUMINA_DATAPLANE_DIAGNOSTICS)",
+                        f"        if (wanted[{idx >> 6}] & "
+                        f"(UINT64_C(1) << {idx & 63})) {{",
+                        "            size_t subject_bytes =",
+                        "                offset <= len ? len - offset : 0;",
+                        "            luminawaf_dataplane_record_exact_verifier(",
+                        f"                {idx}u, subject_bytes, 0);",
+                        f"            if (g_short_rule_table[{idx}]("
+                        "data, len, offset))",
+                        f"                matched[{idx >> 6}] |= "
+                        f"UINT64_C(1) << {idx & 63};",
+                        "        }",
+                        "#else",
+                        f"        if ((wanted[{idx >> 6}] & "
+                        f"(UINT64_C(1) << {idx & 63})) &&",
+                        f"            g_short_rule_table[{idx}]("
+                        "data, len, offset))",
+                        f"            matched[{idx >> 6}] |= "
+                        f"UINT64_C(1) << {idx & 63};",
+                        "#endif",
+                    ])
+                adapter.extend([
+                    "        return;",
+                    "    }",
+                    f"    uint64_t hits = lumina_shared_call_router_{router}_match(",
+                    "        data, len, offset, local_wanted);",
+                ])
+                for idx, local_bit in members:
+                    adapter.extend([
+                        f"    if (hits & (UINT64_C(1) << {local_bit}))",
+                        f"        matched[{idx >> 6}] |= "
+                        f"UINT64_C(1) << {idx & 63};",
+                    ])
+                adapter.append("}")
+                shared_phrase_stats['sources'].append('\n'.join(adapter))
+                continue
             tables_code += f"    case {router}: {{\n        uint64_t local_wanted = 0;\n"
             for idx, local_bit in members:
                 tables_code += (
@@ -8471,7 +11834,8 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
                     (var_type != 3 || g_short_rule_hdr_mask[idx] == 0 ||
                      (g_short_rule_hdr_mask[idx] & header_mask)) &&
                     (g_short_rule_collection_mask[idx] == 0 || (g_short_rule_collection_mask[idx] & collection_mask))) {{
-                    int rid = g_short_rule_table[idx](data, len, i);
+                    int rid = lumina_call_exact_verifier(
+                        idx, data, len, i, 0);
                     if (rid) return (rid & 0xFFFFFF) | (g_short_rule_paranoia[idx] << 24);
                 }}
                 w &= w - 1;
@@ -8499,13 +11863,33 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
         f.write("\n".join(line.rstrip() for line in tx_c.splitlines()) + "\n")
 
 
-    # rule function chunks parser_rules_0003..
+    # Rule function chunks parser_rules_0003.. retain their historical layout.
     for ci, code in enumerate(fn_chunks):
         with open(os.path.join(args.out_dir, f'parser_rules_{ci+3:04d}.c'), 'w') as f:
             f.write(code)
 
+    # Shared exact routers are intentionally isolated after all existing rule
+    # chunks. Keeping their large DFA tables out of a rule translation unit
+    # preserves matcher addresses and avoids avoidable BTB layout regressions.
     # ---- regenerate parser_input.c (lumina_waf_scan delegates to master scan) ----
     nchunks = 3 + len(fn_chunks)
+    auxiliary_sources = [
+        combined_seed_proof_ac_source,
+        request_body_seed_proof_ac_source,
+        *shared_phrase_stats['sources'],
+    ]
+    if auxiliary_sources:
+        router_source = (
+            "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n"
+            "#include \"generated/crs_short_rules.h\"\n"
+            "#include \"luminawaf.h\"\n\n" +
+            "\n\n".join(auxiliary_sources) + "\n")
+        with open(
+                os.path.join(args.out_dir, f'parser_rules_{nchunks:04d}.c'),
+                'w') as stream:
+            stream.write(router_source)
+        nchunks += 1
+
     inp = "#include <stddef.h>\n#include <string.h>\n#include \"generated/crs_short_rules.h\"\n#include \"luminawaf.h\"\n\n"
     inp += "int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset, uint32_t context_flag, uint8_t var_type, uint32_t header_mask, uint64_t collection_mask);\n\n"
     inp += "/* v9: single master scan over the bitmask-routed table; flat p99, branchless routing. */\n"
@@ -8529,6 +11913,21 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
     hdr += ("#define LUMINA_SHORT_RULE_FIRST_BYTE_MASK_DENSE "
             f"{1 if first_byte_mask_dense else 0}\n")
     hdr += f"extern const uint64_t g_short_rule_mask[256][{NWORDS}];\n"
+    hdr += (
+        "extern const uint64_t "
+        f"g_short_rule_transform_search_mask[256][{NWORDS}];\n")
+    hdr += (
+        "extern const uint64_t "
+        f"g_short_rule_transform_search_rules[{NWORDS}];\n")
+    hdr += f"extern const uint64_t g_short_rule_mandatory_byte_mask[256][{NWORDS}];\n"
+    hdr += f"extern const uint64_t g_short_rule_mandatory_byte_rules[{NWORDS}];\n"
+    hdr += f"#define LUMINA_PREFIX2_CLASS_COUNT {len(prefix2_classes)}\n"
+    hdr += (
+        f"extern const {prefix2_class_type} "
+        "g_short_rule_prefix2_class[65536];\n")
+    hdr += (
+        "extern const uint64_t "
+        f"g_short_rule_prefix2_reject[{len(prefix2_classes)}][{NWORDS}];\n")
     hdr += f"extern const uint64_t g_short_rule_anywhere_mask[{NWORDS}];\n"
     hdr += f"extern const uint64_t g_short_rule_empty_mask[{NWORDS}];\n"
     hdr += f"extern const uint64_t g_short_rule_request_body_mask[{NWORDS}];\n"
@@ -8541,6 +11940,7 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
     hdr += f"extern const uint64_t g_short_rule_collection_mask[{n}];\n"
     hdr += f"extern const uint8_t g_short_rule_category[{n}];\n"
     hdr += f"extern const bool g_short_rule_multimatch[{n}];\n"
+    hdr += f"extern const bool g_short_rule_transform_search[{n}];\n"
     hdr += f"extern const uint8_t g_short_rule_paranoia[{n}];\n"
     hdr += f"extern const uint16_t g_short_rule_var_type[{n}];\n"
     hdr += f"extern const uint32_t g_short_rule_hdr_mask[{n}];\n"
@@ -8548,15 +11948,30 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
     hdr += f"extern const int g_short_rule_id[{n}];\n"
     hdr += f"extern const uint8_t g_short_rule_shared_router[{n}];\n"
     hdr += f"#define LUMINA_SHARED_ROUTER_COUNT {shared_router_count}\n"
+    hdr += "#define LUMINA_VALUE_REPETITIVE UINT8_C(1)\n"
     if shared_router_count:
         hdr += (
             f"extern const uint64_t g_shared_router_rule_mask[{shared_router_count}]"
             f"[{NWORDS}];\n"
             "extern void lumina_dispatch_shared_router(int router_id, "
             "const unsigned char *data, size_t len, size_t offset, "
-            "const uint64_t *wanted, uint64_t *matched);\n")
+            "const uint64_t *wanted, uint64_t *matched, "
+            "uint8_t value_flags);\n")
     hdr += f"extern int (*g_short_rule_table[{n}])(const unsigned char*,size_t,size_t);\n"
+    hdr += (
+        f"extern int (*const g_short_rule_prefix4_gate[{n}])("
+        "const unsigned char*,size_t,size_t);\n")
     hdr += "extern void lumina_reset_transform_view_cache(void);\n"
+    hdr += (
+        "extern void lumina_filter_identity_mandatory_candidates("
+        "const unsigned char *data, size_t len, "
+        "uint64_t *pos0, uint64_t *posN, "
+        "uint64_t *transform_dirty_rules, uint8_t *value_flags);\n")
+    hdr += (
+        "extern void lumina_filter_request_body_identity_mandatory_candidates("
+        "const unsigned char *data, size_t len, "
+        "uint64_t *pos0, uint64_t *posN, "
+        "uint64_t *transform_dirty_rules, uint8_t *value_flags);\n")
     hdr += "extern int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset, uint32_t context_flag, uint8_t var_type, uint32_t header_mask, uint64_t collection_mask);\n"
     hdr += "extern int lumina_waf_scan(const unsigned char *str, size_t len);\n"
     for safe in pm_scanners:
@@ -8609,7 +12024,13 @@ int lumina_scan_generated(const unsigned char *data, size_t len, size_t offset,
                     "_tx_chain_member_count", len(r.get("_chain_members", []))),
                 "transaction_kind": (r.get("_tx_chain") or {}).get("kind"),
                 "transaction_score": r.get("_tx_score"),
+                "transaction_exact_matcher_stubbed": bool(
+                    r.get("_tx_full_owner")),
+                "generic_dispatch_owned": not bool(r.get("_tx_full_owner")),
                 "regex_backend": r.get("_regex_backend"),
+                "transform_search_mode": (
+                    "full-view-all-offsets"
+                    if r.get("_transform_all_offsets") else None),
             }
             for idx, r in enumerate(detection)
         ],

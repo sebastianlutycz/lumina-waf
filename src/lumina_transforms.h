@@ -9,6 +9,12 @@
 extern "C" {
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define LUMINA_TRANSFORM_INTERNAL __attribute__((visibility("hidden")))
+#else
+#define LUMINA_TRANSFORM_INTERNAL
+#endif
+
 /* ============================================================================
  * K3 — Transform pipeline (ModSecurity t: chain) — F2.
  *
@@ -49,6 +55,13 @@ typedef enum {
     LUMINA_T_REMOVE_COMMENTS_CHAR = (1u << 17)
 } LuminaTransformId;
 
+typedef struct {
+    /* Exact observed-byte set when known != 0. Unknown is a sound
+     * conservative state: no transform may be skipped from this object. */
+    uint64_t observed_bytes[4];
+    uint8_t known;
+} LuminaTransformFeatures;
+
 /* Per-rule ordered transform chain, indexed by engine rule idx.
  * Declared here for the dispatch; defined in generated/crs_transform_mask.c.
  * Row is a null-terminated list of LuminaTransformId in CRS application order. */
@@ -59,6 +72,17 @@ extern const uint8_t g_rule_transform_seq_id[LUMINA_SHORT_RULE_COUNT];
  * (some operators shrink/grow the buffer). buf must point at a mutable buffer
  * of at least lumina_xform_scratch_cap() bytes. */
 size_t lumina_apply_transforms(const LuminaTransformId *seq, uint8_t *buf, size_t len);
+size_t lumina_apply_transform_step(
+    LuminaTransformId transform, uint8_t *buf, size_t len);
+int lumina_transform_step_may_change(
+    LuminaTransformId transform, const uint8_t *buf, size_t len);
+LUMINA_TRANSFORM_INTERNAL void lumina_transform_features_init(
+    LuminaTransformFeatures *features, const uint64_t observed_bytes[4]);
+LUMINA_TRANSFORM_INTERNAL int lumina_transform_features_may_change(
+    const LuminaTransformFeatures *features, LuminaTransformId transform);
+LUMINA_TRANSFORM_INTERNAL size_t lumina_apply_transform_step_features(
+    LuminaTransformId transform, uint8_t *buf, size_t len,
+    LuminaTransformFeatures *features);
 
 /* ---- operators (each returns new length; operates in place) ---- */
 void   lumina_transform_lower(uint8_t *buf, size_t len);
@@ -84,5 +108,7 @@ size_t   lumina_xform_scratch_cap(void);
 #ifdef __cplusplus
 }
 #endif
+
+#undef LUMINA_TRANSFORM_INTERNAL
 
 #endif /* LUMINA_TRANSFORMS_H */

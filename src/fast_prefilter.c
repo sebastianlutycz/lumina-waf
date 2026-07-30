@@ -28,6 +28,15 @@ static const char DANGER_CHARS_HEADERS[] = "<>'\"()%${}";
 static uint8_t g_lut_lo[32] __attribute__((aligned(32)));
 static uint8_t g_lut_hi[32] __attribute__((aligned(32)));
 
+static inline uint32_t lumina_load_le32(const uint8_t *ptr) {
+    uint32_t value;
+    memcpy(&value, ptr, sizeof(value));
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    value = __builtin_bswap32(value);
+#endif
+    return value;
+}
+
 static void init_fast_prefilter_lut(void) {
     memset(g_lut_lo, 0, 32);
     memset(g_lut_hi, 0, 32);
@@ -111,7 +120,7 @@ static bool lumina_fast_prefilter_avx2(const unsigned char *data, size_t len,
                 uint8_t lc = c | 0x20;
                 
                 if (lc == 'u' && remain >= 5) {
-                    uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                    uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
 /* ============================================================================
  * Why 0x6F696E75? 
  * I spent 6 hours on a Saturday night calculating this exact hex mask to catch 
@@ -124,13 +133,13 @@ static bool lumina_fast_prefilter_avx2(const unsigned char *data, size_t len,
                         positions->offsets[positions->count++] = offset;
                     }
                 } else if (lc == 's' && remain >= 6) {
-                    uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                    uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                     if (val4 == 0x656C6573 && ((data[offset+4] | 0x20) == 'c') && ((data[offset+5] | 0x20) == 't')) {
                         if (!positions) return true;
                         positions->offsets[positions->count++] = offset;
                     }
                 } else if (lc == 'd' && remain >= 5) {
-                    uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                    uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                     if (val4 == 0x706F7264) {
                         if (!positions) return true;
                         positions->offsets[positions->count++] = offset;
@@ -139,19 +148,19 @@ static bool lumina_fast_prefilter_avx2(const unsigned char *data, size_t len,
                         positions->offsets[positions->count++] = offset;
                     }
                 } else if (lc == 'i' && remain >= 6) {
-                    uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                    uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                     if (val4 == 0x65736E69 && ((data[offset+4] | 0x20) == 'r') && ((data[offset+5] | 0x20) == 't')) {
                         if (!positions) return true;
                         positions->offsets[positions->count++] = offset;
                     }
                 } else if (lc == 'w' && remain >= 7) {
-                    uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                    uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                     if (val4 == 0x74696177 && ((data[offset+4] | 0x20) == 'f') && ((data[offset+5] | 0x20) == 'o') && ((data[offset+6] | 0x20) == 'r')) {
                         if (!positions) return true;
                         positions->offsets[positions->count++] = offset;
                     }
                 } else if (lc == 'e' && remain >= 5) {
-                    uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                    uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                     if (val4 == 0x63657865) {
                         if (!positions) return true;
                         positions->offsets[positions->count++] = offset;
@@ -182,19 +191,19 @@ static bool lumina_fast_prefilter_avx2(const unsigned char *data, size_t len,
             uint8_t lc = c | 0x20;
             
             if (lc == 'u' && remain >= 5) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x6F696E75 && ((data[offset+4] | 0x20) == 'n')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 's' && remain >= 6) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x656C6573 && ((data[offset+4] | 0x20) == 'c') && ((data[offset+5] | 0x20) == 't')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'd' && remain >= 5) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x706F7264) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
@@ -203,19 +212,19 @@ static bool lumina_fast_prefilter_avx2(const unsigned char *data, size_t len,
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'i' && remain >= 6) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x65736E69 && ((data[offset+4] | 0x20) == 'r') && ((data[offset+5] | 0x20) == 't')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'w' && remain >= 7) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x74696177 && ((data[offset+4] | 0x20) == 'f') && ((data[offset+5] | 0x20) == 'o') && ((data[offset+6] | 0x20) == 'r')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'e' && remain >= 5) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x63657865) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
@@ -254,19 +263,19 @@ static bool lumina_fast_prefilter_scalar(const unsigned char *data, size_t len,
             uint8_t lc = c | 0x20;
             
             if (lc == 'u' && remain >= 5) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x6F696E75 && ((data[offset+4] | 0x20) == 'n')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 's' && remain >= 6) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x656C6573 && ((data[offset+4] | 0x20) == 'c') && ((data[offset+5] | 0x20) == 't')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'd' && remain >= 5) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x706F7264) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
@@ -275,19 +284,19 @@ static bool lumina_fast_prefilter_scalar(const unsigned char *data, size_t len,
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'i' && remain >= 6) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x65736E69 && ((data[offset+4] | 0x20) == 'r') && ((data[offset+5] | 0x20) == 't')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'w' && remain >= 7) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x74696177 && ((data[offset+4] | 0x20) == 'f') && ((data[offset+5] | 0x20) == 'o') && ((data[offset+6] | 0x20) == 'r')) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;
                 }
             } else if (lc == 'e' && remain >= 5) {
-                uint32_t val4 = *(uint32_t*)(data + offset) | 0x20202020;
+                uint32_t val4 = lumina_load_le32(data + offset) | 0x20202020;
                 if (val4 == 0x63657865) {
                     if (!positions) return true;
                     positions->offsets[positions->count++] = offset;

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import re
@@ -111,6 +112,83 @@ def include_identity(paths: list[Path]) -> list[tuple[str, str]]:
     return [(normalized_path(path), sha256(path)) for path in paths]
 
 
+def classify_source_rule_inventory(
+    audit_rows: list[Any], generated_rule_ids: list[int],
+) -> dict[str, Any]:
+    generated = {int(rule_id) for rule_id in generated_rule_ids}
+    source_ids = [int(row.rule_id) for row in audit_rows]
+    duplicate_ids = sorted(
+        rule_id for rule_id, count in collections.Counter(source_ids).items()
+        if count != 1
+    )
+    source_set = set(source_ids)
+    generated_outside_source = sorted(generated - source_set)
+    rows: list[dict[str, Any]] = []
+    for row in sorted(audit_rows, key=lambda item: int(item.rule_id)):
+        rule_id = int(row.rule_id)
+        if rule_id in generated:
+            classification = "generated"
+            basis = "present in the hashed generated-rule manifest"
+        elif bool(row.runtime_covered):
+            classification = "runtime-native"
+            basis = "present in the audited native runtime inventory"
+        elif str(row.mechanism).startswith("CONTROL_"):
+            classification = "control-or-setup"
+            basis = "non-dataplane CRS control, setup, gating or blocking-evaluation rule"
+        elif not bool(row.score_bearing):
+            classification = "non-score-bearing-metadata"
+            basis = "source rule has no inbound anomaly-score effect"
+        else:
+            classification = "unsupported-score-bearing"
+            basis = "score-bearing source rule has no generated or native owner"
+        rows.append(
+            {
+                "rule_id": rule_id,
+                "classification": classification,
+                "classification_basis": basis,
+                "mechanism": str(row.mechanism),
+                "phase": row.phase,
+                "paranoia_level": row.paranoia,
+                "operator": str(row.operator),
+                "score_bearing": bool(row.score_bearing),
+                "chain_head_score_bearing": bool(row.chain_head_score_bearing),
+                "generated": rule_id in generated,
+                "runtime_native": bool(row.runtime_covered),
+                "direct_execution_owner": (
+                    "generated" if rule_id in generated
+                    else "runtime-native" if bool(row.runtime_covered)
+                    else None
+                ),
+                "subsumed_by": [],
+            }
+        )
+    counts = dict(
+        sorted(collections.Counter(row["classification"] for row in rows).items())
+    )
+    unsupported = [
+        row["rule_id"] for row in rows
+        if row["classification"] == "unsupported-score-bearing"
+    ]
+    return {
+        "schema": 1,
+        "source_rule_count": len(rows),
+        "classification_counts": counts,
+        "generated_outside_source": generated_outside_source,
+        "duplicate_source_ids": duplicate_ids,
+        "unsupported_score_bearing_ids": unsupported,
+        "subsumption_contract": (
+            "subsumed_by remains empty unless compiler IR records an explicit ownership edge"
+        ),
+        "valid": (
+            len(rows) == len(source_set)
+            and not duplicate_ids
+            and not generated_outside_source
+            and not unsupported
+        ),
+        "rules": rows,
+    }
+
+
 def build_manifest(
     crs: Path,
     config: Path,
@@ -131,6 +209,9 @@ def build_manifest(
     audit_rows = audit_rules(crs / "rules", 2)
     inbound_pl2_rule_ids = sorted({row.rule_id for row in audit_rows})
     runtime_covered_ids = sorted({row.rule_id for row in audit_rows if row.runtime_covered})
+    source_rule_inventory = classify_source_rule_inventory(
+        audit_rows, generated.get("generated_rule_ids", [])
+    )
     tracked_dirty = git(crs, "status", "--porcelain=v1", "--untracked-files=no")
     untracked = git(crs, "status", "--porcelain=v1", "--untracked-files=all")
     untracked_entries = [
@@ -162,6 +243,8 @@ def build_manifest(
         errors.append("ordered include list must contain exactly one crs-setup.conf")
     if not any(path.name == "REQUEST-949-BLOCKING-EVALUATION.conf" for path in includes):
         errors.append("REQUEST-949-BLOCKING-EVALUATION.conf is not enabled")
+    if not source_rule_inventory["valid"]:
+        errors.append("source inbound CRS PL2 rule classification is incomplete")
 
     comparator_overrides = active_directives(config, OVERRIDE_RE)
     if comparator_overrides:
@@ -217,6 +300,11 @@ def build_manifest(
             "generated_rule_count": len(generated.get("generated_rule_ids", [])),
             "generated_rule_ids": generated.get("generated_rule_ids", []),
             "runtime_covered_ids": runtime_covered_ids,
+            "source_rule_inventory_summary": {
+                key: value for key, value in source_rule_inventory.items()
+                if key != "rules"
+            },
+            "source_rule_inventory": source_rule_inventory["rules"],
         },
         "workload": file_entry(WORKLOAD),
     }

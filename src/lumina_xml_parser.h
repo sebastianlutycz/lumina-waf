@@ -18,6 +18,8 @@ void lumina_xml_value_fragment(LuminaRuleState *state, const unsigned char *ptr,
 void lumina_xml_value_end(LuminaRuleState *state);
 
 int lumina_scan_xml_avx2(const unsigned char *data, size_t len, LuminaRuleState *state);
+LuminaError lumina_parse_and_scan_xml(const unsigned char *data, size_t len,
+                                      LuminaRuleState *state, int *threat);
 
 #ifdef __cplusplus
 }

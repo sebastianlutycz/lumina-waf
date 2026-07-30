@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
+BODY_P50_SIZE_INVERSION_LIMIT = 4.0
+
+
 def load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -26,6 +29,21 @@ def micro_artifact_paths(result_dir: Path, suffix: str) -> list[Path]:
 def overhead_micro_artifact_paths(result_dir: Path, suffix: str) -> list[Path]:
     paths = [result_dir / f"overhead_micro.{suffix}"]
     paths.extend(sorted(result_dir.glob(f"overhead_micro_process_*.{suffix}")))
+    for slug in ("bundlebuild", "inspectprebuilt", "fulldirect"):
+        paths.append(result_dir / f"overhead_micro_{slug}.{suffix}")
+        paths.extend(
+            sorted(
+                result_dir.glob(
+                    f"overhead_micro_{slug}_process_*.{suffix}"
+                )
+            )
+        )
+    return [path for path in paths if path.exists()]
+
+
+def body_micro_artifact_paths(result_dir: Path, suffix: str) -> list[Path]:
+    paths = [result_dir / f"body_micro.{suffix}"]
+    paths.extend(sorted(result_dir.glob(f"body_micro_process_*.{suffix}")))
     return [path for path in paths if path.exists()]
 
 
@@ -85,6 +103,67 @@ def micro_rows(paths: list[Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def body_rule_work_rows(
+    paths: list[Path],
+    rule_ids: tuple[int, ...] = (934100, 934101, 934120),
+) -> list[dict[str, Any]]:
+    benchmark_name = "FullTransaction128KiB/LuminaWAF/AllowJSONVaried"
+    process_rows: list[dict[str, Any]] = []
+    for path in paths:
+        median = next(
+            (
+                item
+                for item in load(path).get("benchmarks", [])
+                if item.get("run_name", "").removesuffix("/repeats:10")
+                == benchmark_name
+                and item.get("aggregate_name") == "median"
+            ),
+            None,
+        )
+        if median is not None:
+            process_rows.append(median)
+
+    rows: list[dict[str, Any]] = []
+    for rule_id in rule_ids:
+        prefix = f"rule_{rule_id}_"
+        counter_names = {
+            "dispatches": prefix + "dispatches_per_tx",
+            "exact_calls": prefix + "exact_calls_per_tx",
+            "exact_bytes": prefix + "exact_bytes_per_tx",
+        }
+        values = {
+            name: [
+                float(item[counter])
+                for item in process_rows
+                if item.get(counter) is not None
+            ]
+            for name, counter in counter_names.items()
+        }
+        if not any(values.values()):
+            continue
+        rows.append(
+            {
+                "rule_id": rule_id,
+                "dispatches": (
+                    statistics.median(values["dispatches"])
+                    if values["dispatches"] else None
+                ),
+                "exact_calls": (
+                    statistics.median(values["exact_calls"])
+                    if values["exact_calls"] else None
+                ),
+                "exact_bytes": (
+                    statistics.median(values["exact_bytes"])
+                    if values["exact_bytes"] else None
+                ),
+                "processes": len(process_rows),
+                "qualified": len(process_rows) >= 5
+                and all(len(items) == len(process_rows) for items in values.values()),
+            }
+        )
+    return rows
+
+
 def fixed_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
     groups: dict[str, list[dict[str, Any]]] = {}
     for item in raw.get("results", []):
@@ -97,7 +176,13 @@ def fixed_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
                 "table": items[0].get("table", "unknown"),
                 "rate": raw.get("requested_rate"),
                 "samples": sum(item["accepted_requests"] for item in items),
-                "min_samples": min(item["accepted_requests"] for item in items),
+                "min_accepted_samples": min(
+                    item["accepted_requests"] for item in items
+                ),
+                "min_samples": min(
+                    item.get("latency_samples", item["accepted_requests"])
+                    for item in items
+                ),
                 "runs": len(items),
                 "canonical_requested": bool(raw.get("canonical_requested")),
             }
@@ -122,10 +207,99 @@ def fixed_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
         row["max_latency_cv"] = max(cvs) if cvs else None
         row["qualified"] = (
             row["canonical_requested"] and row["runs"] >= 5
+            and row["min_accepted_samples"] >= 100_000
             and row["min_samples"] >= 100_000
             and row["rate_cv"] is not None and row["rate_cv"] <= 5.0
         )
         rows.append(row)
+    return rows
+
+
+def body_e2e_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for measurement in raw.get("measurements", []):
+        items = [
+            item for item in measurement.get("results", [])
+            if item.get("valid")
+        ]
+        if not items:
+            continue
+        plan = measurement["plan"]
+        row: dict[str, Any] = {
+            "workload_id": measurement["workload_id"],
+            "size_kib": int(measurement["size_kib"]),
+            "request_class": measurement["request_class"],
+            "engine": measurement["engine"],
+            "measurement_mode": plan["measurement_mode"],
+            "rate": plan.get("fixed_rate"),
+            "connections": int(plan["connections"]),
+            "classification": plan["classification"],
+            "sample_cap_reason": plan["sample_cap_reason"],
+            "required_percentiles": set(plan["required_percentiles"]),
+            "target_samples": int(plan["target_samples"]),
+            "runs": len(items),
+            "min_accepted_samples": min(
+                int(item["accepted_requests"]) for item in items
+            ),
+            "min_samples": min(
+                int(item.get("latency_samples", item["accepted_requests"]))
+                for item in items
+            ),
+            "anomalous": bool(measurement.get("anomalous")),
+            "anomaly_reasons": list(measurement.get("anomaly_reasons", [])),
+            "anomaly_metrics": dict(measurement.get("anomaly_metrics", {})),
+            "qualified": bool(raw.get("qualified_sampling"))
+            and bool(measurement.get("valid"))
+            and not bool(measurement.get("anomalous"))
+            and len(items) >= 5,
+        }
+        for percentile in ("p50", "p90", "p99", "p99_9"):
+            if percentile not in row["required_percentiles"]:
+                row[percentile] = None
+                row[f"{percentile}_ci"] = None
+                continue
+            values = [
+                float(item["latency_us"][percentile])
+                for item in items
+                if percentile in item.get("latency_us", {})
+            ]
+            row[percentile] = statistics.median(values) if values else None
+            row[f"{percentile}_ci"] = bootstrap_median_ci(values)
+        if row.get("p50") is not None and float(row["p50"]) <= 0.0:
+            row["anomalous"] = True
+            row["qualified"] = False
+            row["anomaly_reasons"].append(
+                "non-positive p50 from an empty or invalid latency histogram"
+            )
+        rows.append(row)
+
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(
+            (str(row["engine"]), str(row["request_class"])), []
+        ).append(row)
+    for items in groups.values():
+        ordered = sorted(items, key=lambda item: int(item["size_kib"]))
+        for smaller, larger in zip(ordered, ordered[1:]):
+            smaller_p50 = smaller.get("p50")
+            larger_p50 = larger.get("p50")
+            if (
+                smaller_p50 is None
+                or larger_p50 is None
+                or float(larger_p50) <= 0.0
+            ):
+                continue
+            ratio = float(smaller_p50) / float(larger_p50)
+            if ratio <= BODY_P50_SIZE_INVERSION_LIMIT:
+                continue
+            reason = (
+                f"p50 size-trend inversion: {smaller['size_kib']} KiB is "
+                f"{ratio:.2f}x {larger['size_kib']} KiB"
+            )
+            if reason not in smaller["anomaly_reasons"]:
+                smaller["anomaly_reasons"].append(reason)
+            smaller["anomalous"] = True
+            smaller["qualified"] = False
     return rows
 
 
@@ -140,12 +314,17 @@ def saturation_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
         for item in raw.get("stability", [])
         if item.get("sustainable")
     }
-    best: dict[str, tuple[float, int, float | None, float | None, int, bool]] = {}
+    best: dict[str, dict[str, Any]] = {}
     for (engine, connections), items in groups.items():
         median_rate = statistics.median(item["requests_per_second"] for item in items)
         cpu_values = [item["server_cpu_ns_per_request"] for item in items
                       if item.get("server_cpu_ns_per_request") is not None]
         cpu_ns = statistics.median(cpu_values) if cpu_values else None
+        client_values = [
+            float(item["client_cpu_utilization_percent"])
+            for item in items
+            if item.get("client_cpu_utilization_percent") is not None
+        ]
         stability = sustainable.get((engine, connections))
         if canonical_requested and stability is None:
             continue
@@ -155,24 +334,54 @@ def saturation_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
                  if item["engine"] == engine and item["connections"] == connections),
                 {"cv_percent": None, "valid_runs": len(items)},
             )
-        if engine not in best or median_rate > best[engine][0]:
+        if engine not in best or median_rate > float(best[engine]["rps"]):
             valid_runs = int(stability["valid_runs"])
-            best[engine] = (
-                median_rate, connections, cpu_ns,
-                float(stability["cv_percent"])
-                if valid_runs >= 2 and stability.get("cv_percent") is not None else None,
-                valid_runs,
-                canonical_requested and valid_runs >= 5
-                and stability.get("cv_percent") is not None
-                and float(stability["cv_percent"]) <= 5.0,
+            client_max = max(client_values) if client_values else None
+            client_limit = float(
+                stability.get(
+                    "max_client_utilization_percent",
+                    raw.get("max_client_utilization_percent", 90.0),
+                )
             )
-    return [
-        {"engine": engine, "rps": value[0], "connections": value[1], "cpu_ns": value[2],
-         "cv": value[3], "runs": value[4], "qualified": value[5],
-         "table": next(item.get("table", "unknown") for item in raw.get("results", [])
-                       if item.get("engine") == engine)}
-        for engine, value in sorted(best.items())
-    ]
+            client_headroom = bool(
+                stability.get(
+                    "client_headroom",
+                    len(client_values) == len(items)
+                    and client_max is not None
+                    and client_max <= client_limit,
+                )
+            )
+            best[engine] = {
+                "engine": engine,
+                "rps": median_rate,
+                "connections": connections,
+                "cpu_ns": cpu_ns,
+                "cv": (
+                    float(stability["cv_percent"])
+                    if valid_runs >= 2
+                    and stability.get("cv_percent") is not None else None
+                ),
+                "runs": valid_runs,
+                "client_cpu_median": (
+                    statistics.median(client_values) if client_values else None
+                ),
+                "client_cpu_max": client_max,
+                "client_cpu_limit": client_limit,
+                "client_headroom": client_headroom,
+                "qualified": (
+                    canonical_requested
+                    and valid_runs >= 5
+                    and stability.get("cv_percent") is not None
+                    and float(stability["cv_percent"]) <= 5.0
+                    and client_headroom
+                ),
+                "table": next(
+                    item.get("table", "unknown")
+                    for item in raw.get("results", [])
+                    if item.get("engine") == engine
+                ),
+            }
+    return [value for _, value in sorted(best.items())]
 
 
 def overhead_absolute_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -189,14 +398,25 @@ def overhead_absolute_rows(raw: dict[str, Any]) -> list[dict[str, Any]]:
         rates = [float(item["requests_per_second"]) for item in items]
         cpus = [float(item["server_cpu_ns_per_request"]) for item in items
                 if item.get("server_cpu_ns_per_request") is not None]
+        client_values = [
+            float(item["client_cpu_utilization_percent"])
+            for item in items
+            if item.get("client_cpu_utilization_percent") is not None
+        ]
         stable = stability.get(key, {})
         rows.append({
             "engine": key[0], "connections": key[1], "runs": len(items),
             "rps": statistics.median(rates),
             "cpu_ns": statistics.median(cpus) if cpus else None,
             "cv": stable.get("cv_percent"),
+            "client_cpu_median": (
+                statistics.median(client_values) if client_values else None
+            ),
+            "client_cpu_max": max(client_values) if client_values else None,
+            "client_headroom": bool(stable.get("client_headroom")),
             "qualified": bool(raw.get("canonical_requested"))
-            and len(items) >= 5 and bool(stable.get("stable")),
+            and len(items) >= 5 and bool(stable.get("stable"))
+            and bool(stable.get("client_headroom")),
         })
     return rows
 
@@ -355,6 +575,86 @@ def pmu_rows(result_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def body_pmu_rows(result_dir: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in sorted(result_dir.glob("body_pmu_*.csv")):
+        counters: dict[str, float] = {}
+        running: dict[str, float] = {}
+        unavailable: set[str] = set()
+        with path.open(encoding="utf-8") as stream:
+            for fields in csv.reader(stream):
+                if len(fields) < 5:
+                    continue
+                event = fields[2].strip()
+                value = fields[0].strip()
+                if not event:
+                    continue
+                if value.startswith("<"):
+                    unavailable.add(event)
+                    continue
+                try:
+                    counters[event] = float(value)
+                    running[event] = float(fields[4])
+                except ValueError:
+                    unavailable.add(event)
+
+        def ratio(numerator: str, denominator: str) -> float | None:
+            base = counters.get(denominator, 0.0)
+            return (
+                counters[numerator] / base * 100.0
+                if numerator in counters and base else None
+            )
+
+        engine = path.stem.removeprefix("body_pmu_")
+        transactions = 0
+        core_log = result_dir / f"body_pmu_{engine}_group_00.log"
+        if core_log.exists():
+            for line in core_log.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines():
+                match = re.match(
+                    r"^FullTransaction128KiB/.+/AllowJSONVaried(?:/repeats:[0-9]+)?\s+"
+                    r"\S+\s+\S+\s+\S+\s+\S+\s+([0-9]+)\s+",
+                    line,
+                )
+                if match:
+                    transactions += int(match.group(1))
+        cycles = counters.get("cycles", 0.0)
+        rows.append(
+            {
+                "engine": engine,
+                "ipc": counters.get("instructions", 0.0) / cycles
+                if cycles else None,
+                "cycles_per_transaction": cycles / transactions
+                if cycles and transactions else None,
+                "instructions_per_transaction": (
+                    counters["instructions"] / transactions
+                    if "instructions" in counters and transactions else None
+                ),
+                "branch_miss": ratio("branch-misses", "branches"),
+                "cache_miss": ratio("cache-misses", "cache-references"),
+                "l1d_miss": ratio(
+                    "L1-dcache-load-misses", "L1-dcache-loads"
+                ),
+                "llc_miss": ratio("LLC-load-misses", "LLC-loads"),
+                "itlb_miss": ratio(
+                    "iTLB-load-misses", "iTLB-loads"
+                ),
+                "running": min(running.values()) if running else None,
+                "unavailable_events": sorted(unavailable),
+                "qualified": (
+                    cycles > 0.0
+                    and counters.get("instructions", 0.0) > 0.0
+                    and counters.get("branches", 0.0) > 0.0
+                    and "branch-misses" in counters
+                    and bool(running)
+                    and min(running.values()) >= 90.0
+                ),
+            }
+        )
+    return rows
+
+
 def overhead_pmu_rows(result_dir: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for path in sorted(result_dir.glob("overhead_pmu_*.csv")):
@@ -450,6 +750,25 @@ def percentile_text(row: dict[str, Any], percentile: str) -> str:
     return f"{value} [{ci_text(interval, 1000.0)}]"
 
 
+def body_percentile_text(row: dict[str, Any], percentile: str) -> str:
+    if percentile not in row["required_percentiles"]:
+        return "N/A - outside sample contract"
+    required = {"p50": 1, "p90": 10, "p99": 10_000}[percentile]
+    if row["min_samples"] < required or row.get(percentile) is None:
+        return f"N/A - min {required} samples/run"
+    value = format_time(float(row[percentile]) * 1000.0)
+    if row["runs"] == 1 and row["min_samples"] == 1:
+        return f"{value} (single observation; not a percentile)"
+    return f"{value} [{ci_text(row.get(f'{percentile}_ci'), 1000.0)}]"
+
+
+def body_evidence_class_text(row: dict[str, Any]) -> str:
+    evidence = f"{row['classification']} ({row['sample_cap_reason']})"
+    if row.get("anomalous"):
+        return f"**ANOMALOUS - investigation required**; {evidence}"
+    return evidence
+
+
 def raw_google_benchmark_appendix(result_dir: Path) -> list[str]:
     lines = [
         "## Raw Google Benchmark Output",
@@ -458,8 +777,10 @@ def raw_google_benchmark_appendix(result_dir: Path) -> list[str]:
         "linked; canonical artifacts are required to retain every inner repetition and aggregate row.",
         "",
     ]
-    logs = micro_artifact_paths(result_dir, "log") + overhead_micro_artifact_paths(
-        result_dir, "log"
+    logs = (
+        micro_artifact_paths(result_dir, "log")
+        + body_micro_artifact_paths(result_dir, "log")
+        + overhead_micro_artifact_paths(result_dir, "log")
     )
     if not logs:
         return lines + ["No Google Benchmark log artifact was produced.", ""]
@@ -605,6 +926,15 @@ def render(result_dir: Path) -> str:
     run = load(result_dir / "run_manifest.json")
     micro_paths = micro_artifact_paths(result_dir, "json")
     rows = micro_rows(micro_paths)
+    body_micro_paths = body_micro_artifact_paths(result_dir, "json")
+    body_direct = micro_rows(body_micro_paths)
+    body_rule_work = body_rule_work_rows(body_micro_paths)
+    body_evidence_path = result_dir / "body_evidence/results.json"
+    body_evidence_raw = (
+        load(body_evidence_path) if body_evidence_path.exists() else {}
+    )
+    body_e2e = body_e2e_rows(body_evidence_raw) if body_evidence_raw else []
+    body_pmu = body_pmu_rows(result_dir)
     overhead_micro_paths = overhead_micro_artifact_paths(result_dir, "json")
     overhead_direct = micro_rows(overhead_micro_paths)
     overhead_saturation_path = result_dir / "overhead_saturation/results.json"
@@ -668,6 +998,8 @@ def render(result_dir: Path) -> str:
         load(pmu_qualification_path) if pmu_qualification_path.exists()
         else run.get("pmu_qualification", {})
     )
+    body_micro_qualification = run.get("body_micro_qualification", {})
+    body_pmu_qualification = run.get("body_pmu_qualification", {})
     matrix_path = result_dir / "correctness_matrix/results.json"
     correctness = load(matrix_path).get("summary", []) if matrix_path.exists() else []
     full_correctness = full_correctness_rows(result_dir)
@@ -678,18 +1010,54 @@ def render(result_dir: Path) -> str:
     )
     sampling_plan_path = result_dir / "sampling_plan.json"
     sampling_plan = load(sampling_plan_path) if sampling_plan_path.exists() else {}
+    baseline_consistency_path = result_dir / "baseline_phase_consistency.json"
+    baseline_consistency = (
+        load(baseline_consistency_path)
+        if baseline_consistency_path.exists()
+        else run.get("baseline_phase_consistency", {})
+    )
     environment_path = result_dir / "environment.json"
     environment_end_path = result_dir / "environment_end.json"
     environment = load(environment_path) if environment_path.exists() else {}
     environment_end = load(environment_end_path) if environment_end_path.exists() else {}
     label = "CANONICAL" if run.get("canonical") else "NON-CANONICAL"
     sample_qualified = bool(sampling_plan.get("qualified_sampling"))
+    body_sample_qualified = bool(body_evidence_raw.get("qualified_sampling"))
+    e2e_phase = run.get("phases", {}).get("e2e", "not-run")
+    body_phase = run.get("phases", {}).get("body", "not-run")
+    e2e_observed = (
+        "diagnostic only"
+        if e2e_phase == "passed" and not sample_qualified
+        else e2e_phase
+    )
+    body_observed = (
+        "diagnostic only"
+        if body_phase == "passed" and not body_sample_qualified
+        else body_phase
+    )
     throughput_label = "Sustainable RPS" if sample_qualified else "Diagnostic RPS"
+    throughput_section = (
+        "Saturation"
+        if sample_qualified
+        else "Closed-Loop Throughput Sweep (Diagnostic)"
+    )
     fixed_qualified = bool(fixed_raw.get("valid")) and bool(fixed) and all(
         row["qualified"] for row in fixed
     )
     saturation_qualified = bool(saturation_raw.get("valid")) and bool(saturation) and all(
         row["qualified"] for row in saturation
+    )
+    body_e2e_qualified = (
+        body_sample_qualified
+        and bool(body_evidence_raw.get("valid"))
+        and bool(body_e2e)
+        and all(row["qualified"] for row in body_e2e)
+    )
+    oracle_qualified = (
+        run.get("phases", {}).get("lumina_crs") == "passed"
+        and run.get("phases", {}).get("coraza_crs") == "passed"
+        and bool(full_correctness)
+        and all(row["passed"] for row in full_correctness)
     )
     scaling_requested = bool(run.get("scaling_qualification", {}).get("requested"))
     scaling_qualified = (
@@ -710,6 +1078,10 @@ def render(result_dir: Path) -> str:
     direct_source_ids = set(manifest["lumina"]["generated_rule_ids"]) | set(
         manifest["lumina"]["runtime_covered_ids"]
     )
+    source_inventory = manifest["lumina"].get(
+        "source_rule_inventory_summary", {}
+    )
+    source_class_counts = source_inventory.get("classification_counts", {})
     lines = [
         "# LuminaWAF Benchmark Harness v1",
         "",
@@ -725,6 +1097,8 @@ def render(result_dir: Path) -> str:
         f"- Generated Lumina execution units: `{manifest['lumina']['generated_rule_count']}`",
         f"- Native runtime-covered source IDs: `{len(manifest['lumina']['runtime_covered_ids'])}`",
         f"- Distinct source IDs represented directly by generated/native execution: `{len(direct_source_ids)}`",
+        "- Complete source-ID classification: "
+        "[`source_rule_inventory.json`](source_rule_inventory.json)",
         "- Rule-count note: setup, chain and non-score-bearing source rules are not one-to-one "
         "execution units; semantic coverage is established by the oracle gate, not by dividing "
         "execution-unit count by source-rule count.",
@@ -737,6 +1111,16 @@ def render(result_dir: Path) -> str:
         "- Artifact integrity: [`artifact_preflight.json`](artifact_preflight.json), "
         "[`artifact_postflight.json`](artifact_postflight.json)",
         "- Methodology: [`methodology/README.md`](../../../methodology/README.md)",
+        "",
+        "### Source Rule Inventory",
+        "",
+        f"- Generated execution owner: `{source_class_counts.get('generated', 0)}` IDs",
+        f"- Native runtime owner: `{source_class_counts.get('runtime-native', 0)}` IDs",
+        f"- CRS control/setup/meta rules: `{source_class_counts.get('control-or-setup', 0)}` IDs",
+        f"- Unsupported score-bearing rules: "
+        f"`{len(source_inventory.get('unsupported_score_bearing_ids', []))}` IDs",
+        "- `subsumed_by` is emitted only from an explicit compiler ownership edge; the harness "
+        "does not infer semantic coverage from rule counts.",
         "",
         "## Host State Annotation",
         "",
@@ -766,16 +1150,26 @@ def render(result_dir: Path) -> str:
         f"{'PASS' if micro_qualification.get('valid') and len(micro_paths) >= 5 else 'NOT QUALIFIED'} |",
         f"| Engine PMU diagnostics | {len(pmu_qualification.get('rows', []))} engines | complete counters and >=90% running | "
         f"{'PASS' if pmu_qualification.get('valid') else 'NOT QUALIFIED'} |",
+        f"| Request-body evidence | {body_observed} | "
+        f"direct processes + PMU + predeclared 4/16/128 KiB E2E | "
+        f"{'PASS' if run.get('phases', {}).get('body') == 'passed' and body_micro_qualification.get('valid') and body_pmu_qualification.get('valid') and body_e2e_qualified else 'NOT QUALIFIED'} |",
         f"| Artifact integrity | {run.get('phases', {}).get('artifacts', 'not-run')} | pre/post hashes identical | "
         f"{'PASS' if run.get('phases', {}).get('artifacts') == 'passed' else 'NOT QUALIFIED'} |",
         f"| Lumina CRS oracle gate | {run.get('phases', {}).get('lumina_crs', 'not-run')} | passed | "
         f"{'PASS' if run.get('phases', {}).get('lumina_crs') == 'passed' else 'NOT QUALIFIED'} |",
         f"| Coraza CRS oracle gate | {run.get('phases', {}).get('coraza_crs', 'not-run')} | passed | "
         f"{'PASS' if run.get('phases', {}).get('coraza_crs') == 'passed' else 'NOT QUALIFIED'} |",
-        f"| Fixed-rate E2E | {run.get('phases', {}).get('e2e', 'not-run')} | >=5 runs and >=100000 accepted/run | "
+        f"| Fixed-rate E2E | {e2e_observed} | >=5 runs and >=100000 accepted/run | "
         f"{'PASS' if fixed_qualified else 'NOT QUALIFIED'} |",
-        f"| Saturation stability | {run.get('phases', {}).get('e2e', 'not-run')} | >=5 runs and RPS CV <=5% | "
+        f"| Saturation stability | {e2e_observed} | "
+        f">=5 runs, RPS CV <=5%, client CPU <=90% | "
         f"{'PASS' if saturation_qualified else 'NOT QUALIFIED'} |",
+        f"| Cross-phase plain-NGINX baseline | "
+        f"{run.get('phases', {}).get('baseline_consistency', 'not-run')} | "
+        f"shared connection point, RPS delta <="
+        f"{baseline_consistency.get('max_rps_delta_percent', 'N/A')}%, CPU/request delta <="
+        f"{baseline_consistency.get('max_cpu_delta_percent', 'N/A')}% | "
+        f"{'PASS' if baseline_consistency.get('valid') and sample_qualified else 'NOT QUALIFIED'} |",
         f"| Lumina overhead decomposition | {run.get('phases', {}).get('overhead', 'not-run')} | paired E0/E1/E2 + direct kernels | "
         f"{'PASS' if overhead_qualified else 'NOT QUALIFIED'} |",
         f"| Multi-worker scaling | {run.get('phases', {}).get('scaling', 'not-requested')} | "
@@ -856,6 +1250,14 @@ def render(result_dir: Path) -> str:
         "This table includes the complete inbound transaction lifecycle exposed by each engine. "
         "It is not NGINX E2E latency. Attack rows measure time to a blocking decision and may "
         "terminate earlier than allow rows; they do not enumerate every subsequent matching rule.",
+        (
+            "The full oracle gates passed for these artifacts, so CRS-equivalent comparison is "
+            "eligible within each documented observable contract."
+            if oracle_qualified
+            else "The full oracle gates did not qualify these artifacts. Performance rows show "
+            "execution of the generated policy for the pinned CRS PL2 manifest; they are not an "
+            "equivalent-full-CRS speedup claim."
+        ),
         "",
         "| Engine / workload | Median CPU time | Inner repetition CV | Process-level 95% bootstrap CI | Processes | Qualification |",
         "|---|---:|---:|---:|---:|---|",
@@ -871,6 +1273,138 @@ def render(result_dir: Path) -> str:
         lines.append("| unavailable | unavailable | unavailable | - | NOT RUN |")
     lines.extend([
         "",
+        "## Request-Body Evidence",
+        "",
+        "This is a separate evidence class. It does not alter the canonical empty-body GET "
+        "workload. Direct rows measure a complete 128 KiB JSON allow transaction. E2E rows use "
+        "deterministic POST requests and a minimal fixed-response backend in the same NGINX "
+        "process; both front and backend CPU are included in server CPU accounting.",
+        "",
+        "### Direct 128 KiB JSON Transactions",
+        "",
+        "`AllowJSONVaried` is the primary large-body fixture because it avoids a repeated-token "
+        "shortcut. `AllowJSON` is retained as a secondary/control workload.",
+        "",
+        "| Engine / workload | Median CPU time | Effective throughput | Inner CV | Process 95% CI | Processes | Qualification |",
+        "|---|---:|---:|---:|---:|---:|---|",
+    ])
+    if body_direct:
+        lines.extend(
+            f"| `{row['name']}` | {format_time(row['cpu'])} | "
+            f"{(0.125 * 1_000_000_000.0 / row['cpu']):.2f} MiB/s | "
+            f"{percent_text(row['inner_cv'])} | {ci_text(row['ci'])} | "
+            f"{row['processes']} | "
+            f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
+            for row in body_direct
+        )
+    else:
+        lines.append("| unavailable | - | - | - | - | - | NOT RUN |")
+    lines.extend([
+        "",
+        "### Lumina 9341xx Logical Work on Varied JSON",
+        "",
+        "These compiler diagnostics count logical work inside the Lumina transaction. They are "
+        "not hardware PMU attribution and do not assign cycles to an individual rule.",
+        "",
+        "| Rule ID | Dispatches/transaction | Exact verifier calls/transaction | Exact subject bytes/transaction | Processes | Quality |",
+        "|---:|---:|---:|---:|---:|---|",
+    ])
+    if body_rule_work:
+        lines.extend(
+            f"| `{row['rule_id']}` | {decimal_text(row['dispatches'])} | "
+            f"{decimal_text(row['exact_calls'])} | "
+            f"{decimal_text(row['exact_bytes'], 0)} | {row['processes']} | "
+            f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
+            for row in body_rule_work
+        )
+    else:
+        lines.append("| unavailable | - | - | - | - | NOT RUN |")
+    lines.extend([
+        "",
+        "### NGINX E2E Body Latency",
+        "",
+        "Qualified rows run at no more than 60% of the engine's own stable saturation rate for "
+        "the same body size and verdict class. The current smoke protocol uses at least three "
+        "short calibration runs and no more than 40% of their median rate; legacy artifacts "
+        "retain their recorded, potentially smaller diagnostic plan. Qualified rates below "
+        "wrk2's 1 RPS minimum and smoke rates below the 10 RPS short-run histogram floor use one "
+        "explicitly labeled closed-loop connection. p99.9 is never published "
+        "from this matrix. A large fixed-rate/calibration p50 amplification or a greater than "
+        "4x inversion between adjacent body sizes is retained but marked anomalous.",
+        "",
+        "| Body | Verdict class | Engine | Load | p50 | p90 | p99 | Runs | Min latency samples/run | Evidence class | Qualification |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|---|---|",
+    ])
+    if body_e2e:
+        lines.extend(
+            f"| {row['size_kib']} KiB | `{row['request_class']}` | "
+            f"`{row['engine']}` | "
+            f"{str(row['rate']) + ' RPS' if row['measurement_mode'] == 'fixed-rate' else 'closed-loop c=1'} | "
+            f"{body_percentile_text(row, 'p50')} | "
+            f"{body_percentile_text(row, 'p90')} | "
+            f"{body_percentile_text(row, 'p99')} | "
+            f"{row['runs']} | {row['min_samples']} | "
+            f"{body_evidence_class_text(row)} | "
+            f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
+            for row in body_e2e
+        )
+    else:
+        lines.append("| unavailable | - | - | - | - | - | - | - | - | - | NOT RUN |")
+    body_anomalies = [row for row in body_e2e if row.get("anomalous")]
+    if body_anomalies:
+        lines.extend([
+            "",
+            "> **Anomalous body latency evidence - investigation required.** "
+            "These rows remain visible as diagnostics but cannot qualify:",
+        ])
+        lines.extend(
+            "> - "
+            f"`{row['engine']}` {row['size_kib']} KiB "
+            f"`{row['request_class']}`: "
+            + "; ".join(row["anomaly_reasons"])
+            for row in body_anomalies
+        )
+    lines.extend([
+        "",
+        "Raw body plans, generated workload hashes and per-leg artifacts: "
+        "[`body_evidence/results.json`](body_evidence/results.json).",
+        (
+            "Planned timed E2E lower bound: "
+            + wall_time_text(
+                body_evidence_raw.get("planned_timed_seconds", {}).get(
+                    "total_lower_bound", 0
+                )
+            )
+            + ". It excludes build, correctness, process startup, direct microbenchmark and PMU "
+            "time."
+            if body_evidence_raw.get("planned_timed_seconds")
+            else "Planned timed E2E lower bound: unavailable."
+        ),
+        "",
+        "### 128 KiB Varied-JSON PMU",
+        "",
+        "| Engine | Cycles/transaction | Instructions/transaction | IPC | Branch misses | Cache misses | L1D misses | LLC misses | iTLB misses | Minimum running | Quality |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ])
+    if body_pmu:
+        lines.extend(
+            f"| `{row['engine']}` | "
+            f"{decimal_text(row['cycles_per_transaction'], 0)} | "
+            f"{decimal_text(row['instructions_per_transaction'], 0)} | "
+            f"{decimal_text(row['ipc'])} | "
+            f"{pmu_percent_text(row['branch_miss'])} | "
+            f"{pmu_percent_text(row['cache_miss'])} | "
+            f"{pmu_percent_text(row['l1d_miss'])} | "
+            f"{pmu_percent_text(row['llc_miss'])} | "
+            f"{pmu_percent_text(row['itlb_miss'])} | "
+            f"{pmu_percent_text(row['running'])} | "
+            f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
+            for row in body_pmu
+        )
+    else:
+        lines.append("| unavailable | - | - | - | - | - | - | - | - | - | NOT RUN |")
+    lines.extend([
+        "",
         "## LuminaWAF Overhead Decomposition (Diagnostic)",
         "",
         "This section separates plain NGINX, the loaded disabled module, and production CRS PL2 "
@@ -879,19 +1413,21 @@ def render(result_dir: Path) -> str:
         "",
         "### Absolute E2E Saturation Sources",
         "",
-        "| Layer | Connections | RPS | Server CPU/request | Runs | RPS CV | Qualification |",
-        "|---|---:|---:|---:|---:|---:|---|",
+        "| Layer | Connections | RPS | Server CPU/request | Client CPU median/max | Runs | RPS CV | Qualification |",
+        "|---|---:|---:|---:|---:|---:|---:|---|",
     ])
     if overhead_absolute:
         lines.extend(
             f"| `{row['engine']}` | {row['connections']} | {row['rps']:.2f} | "
             f"{format_time(row['cpu_ns']) if row['cpu_ns'] is not None else 'unavailable'} | "
+            f"{percent_text(row['client_cpu_median'])} / "
+            f"{percent_text(row['client_cpu_max'])} | "
             f"{row['runs']} | {percent_text(row['cv'])} | "
             f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
             for row in overhead_absolute
         )
     else:
-        lines.append("| unavailable | - | - | - | - | - | NOT RUN |")
+        lines.append("| unavailable | - | - | - | - | - | - | NOT RUN |")
     lines.extend([
         "",
         "### Paired Server CPU Deltas",
@@ -922,7 +1458,7 @@ def render(result_dir: Path) -> str:
         "",
         "### Absolute Fixed-Rate Latency",
         "",
-        "| Layer | Rate | p50 | p90 | p99 | p99.9 | Runs | Min samples/run | Qualification |",
+        "| Layer | Rate | p50 | p90 | p99 | p99.9 | Runs | Min latency samples/run | Qualification |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ])
     if overhead_fixed:
@@ -938,6 +1474,12 @@ def render(result_dir: Path) -> str:
     lines.extend([
         "",
         "### Direct Allow-Rotation Kernels",
+        "",
+        "Each boundary is collected by a separate benchmark process and the boundary order rotates "
+        "between independent process sets. These are compiler-visible kernels, not nested function "
+        "timers: `FullDirect` may optimize bundle projection together with inspection, while "
+        "`InspectPrebuilt` copies a caller-owned bundle before inspection. Their medians must not "
+        "be subtracted from each other.",
         "",
         "| Boundary | Median CPU time | Inner CV | Process-level 95% bootstrap CI | Processes | Qualification |",
         "|---|---:|---:|---:|---:|---|",
@@ -1008,7 +1550,7 @@ def render(result_dir: Path) -> str:
             "bodies, so this section measures URI, query and request-header inspection rather than "
             "request-body ingestion.",
             "",
-            "| Engine | Rate | p50 [95% CI] | p90 [95% CI] | p99 [95% CI] | p99.9 [95% CI] | Max | Runs | Min samples/run | RPS CV | Qualification |",
+            "| Engine | Rate | p50 [95% CI] | p90 [95% CI] | p99 [95% CI] | p99.9 [95% CI] | Max | Runs | Min latency samples/run | RPS CV | Qualification |",
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
@@ -1025,33 +1567,72 @@ def render(result_dir: Path) -> str:
         )
     else:
         lines.append("| unavailable | - | - | - | - | - | - | - | - | - | NOT RUN |")
+    if not sample_qualified:
+        lines.extend([
+            "",
+            "**Diagnostic only:** bounded smoke p50/p90 values are pipeline sanity checks. "
+            "They are not latency claims; sparse samples and host ordering can invert baseline "
+            "and loaded-off rows.",
+        ])
     lines.extend(
         [
             "",
-            "## Saturation",
+            f"## {throughput_section}",
             "",
-            f"| Engine | {throughput_label} | Connections | CPU/request | Runs | RPS CV | Qualification |",
-            "|---|---:|---:|---:|---:|---:|---|",
+            f"| Engine | {throughput_label} | Connections | CPU/request | Client CPU median/max | Runs | RPS CV | Qualification |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
     if saturation_primary:
         lines.extend(
             f"| `{row['engine']}` | {row['rps']:.2f} | {row['connections']} | "
             f"{format_time(row['cpu_ns']) if row['cpu_ns'] is not None else 'unavailable'} | "
+            f"{percent_text(row['client_cpu_median'])} / "
+            f"{percent_text(row['client_cpu_max'])} | "
             f"{row['runs']} | {percent_text(row['cv'])} | "
             f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
             for row in saturation_primary
         )
     else:
-        lines.append("| unavailable | - | - | - | - | - | NOT RUN |")
+        lines.append("| unavailable | - | - | - | - | - | - | NOT RUN |")
     lines.extend(
         [
             "",
             "A point is sustainable only with the required independent runs, zero response errors "
-            "and RPS CV no greater than 5%.",
+            "and RPS CV no greater than 5%, and load-generator CPU no greater than 90%. "
+            "Non-qualified runs report the best observed point only as a throughput sweep.",
             "CPU/request is NGINX master-plus-direct-worker `utime+stime` from `/proc/<pid>/stat` "
             "divided by completed requests. It excludes the load generator and is diagnostic at "
             "the kernel clock-tick resolution recorded in `e2e_saturation/results.json`.",
+            "",
+            "### Cross-Phase Plain-NGINX Consistency",
+            "",
+            "The same plain-NGINX configuration is measured in the main and overhead phases. "
+            "A publication run fails if their medians materially disagree at a shared connection "
+            "point; a noisy smoke keeps both observations and labels the mismatch.",
+            "",
+            "| Connections | Main RPS | Overhead RPS | RPS delta | Main CPU/request | Overhead CPU/request | CPU delta | Status |",
+            "|---:|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    if baseline_consistency.get("rows"):
+        lines.extend(
+            f"| {row['connections']} | {row['main_median_rps']:.2f} | "
+            f"{row['overhead_median_rps']:.2f} | "
+            f"{row['rps_delta_percent']:.2f}% | "
+            f"{format_time(row['main_median_cpu_ns_per_request']) if row.get('main_median_cpu_ns_per_request') is not None else 'unavailable'} | "
+            f"{format_time(row['overhead_median_cpu_ns_per_request']) if row.get('overhead_median_cpu_ns_per_request') is not None else 'unavailable'} | "
+            f"{row['cpu_delta_percent']:.2f}% | "
+            f"{'CONSISTENT' if row['consistent'] else 'INCONSISTENT'} |"
+            for row in baseline_consistency["rows"]
+        )
+    else:
+        lines.append("| - | - | - | - | - | - | - | NOT RUN |")
+    lines.extend(
+        [
+            "",
+            "Raw gate: "
+            "[`baseline_phase_consistency.json`](baseline_phase_consistency.json).",
             "",
             "## Multi-Worker Scaling",
             "",
@@ -1129,9 +1710,10 @@ def render(result_dir: Path) -> str:
             "## Native-WAF Reference (Not CRS)",
             "",
             "NAXSI does not execute OWASP CRS. It is reported as a native implementation-class "
-            "reference and never enters the CRS-equivalence ranking.",
+            "reference and never enters the CRS-equivalence ranking. A diagnostic NAXSI point "
+            "must not be ranked against an inconsistent plain-NGINX smoke baseline.",
             "",
-            "| Engine | Rate | p50 | p90 | p99 | p99.9 | Max | Runs | Min samples/run | Qualification |",
+            "| Engine | Rate | p50 | p90 | p99 | p99.9 | Max | Runs | Min latency samples/run | Qualification |",
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
@@ -1150,20 +1732,22 @@ def render(result_dir: Path) -> str:
     lines.extend(
         [
             "",
-            f"| Engine | {throughput_label} | Connections | CPU/request | Runs | RPS CV | Qualification |",
-            "|---|---:|---:|---:|---:|---:|---|",
+            f"| Engine | {throughput_label} | Connections | CPU/request | Client CPU median/max | Runs | RPS CV | Qualification |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
     if saturation_native:
         lines.extend(
             f"| `{row['engine']}` | {row['rps']:.2f} | {row['connections']} | "
             f"{format_time(row['cpu_ns']) if row['cpu_ns'] is not None else 'unavailable'} | "
+            f"{percent_text(row['client_cpu_median'])} / "
+            f"{percent_text(row['client_cpu_max'])} | "
             f"{row['runs']} | {percent_text(row['cv'])} | "
             f"{'QUALIFIED' if row['qualified'] else 'NOT QUALIFIED'} |"
             for row in saturation_native
         )
     else:
-        lines.append("| unavailable | - | - | - | - | - | NOT RUN |")
+        lines.append("| unavailable | - | - | - | - | - | - | NOT RUN |")
     lines.extend(
         [
             "",

@@ -10,6 +10,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+REQUEST_BODY_PROCESSOR_RULES = (
+    "SecRule REQUEST_HEADERS:Content-Type "
+    "\"@rx ^(?:application(?:/soap\\+|/)|text/)xml(?:\\s*;|$)\" "
+    "\"id:200000,phase:1,pass,nolog,t:none,t:lowercase,"
+    "ctl:requestBodyProcessor=XML\"",
+    "SecRule REQUEST_HEADERS:Content-Type "
+    "\"@rx ^application/(?:[a-z0-9.-]+\\+)?json(?:\\s*;|$)\" "
+    "\"id:200001,phase:1,pass,nolog,t:none,t:lowercase,"
+    "ctl:requestBodyProcessor=JSON\"",
+)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -27,6 +38,7 @@ def main() -> int:
         "SecRequestBodyAccess On",
         "SecResponseBodyAccess Off",
         "SecAuditEngine Off",
+        *REQUEST_BODY_PROCESSOR_RULES,
         "",
         *(f"Include {path.resolve()}" for path in include_paths),
         "",
@@ -42,6 +54,7 @@ def main() -> int:
         "SecPcreMatchLimitRecursion 1000",
         "SecTmpDir /tmp/",
         "SecDataDir /tmp/",
+        *REQUEST_BODY_PROCESSOR_RULES,
         "",
         *(f"Include {path.resolve()}" for path in include_paths),
         "",

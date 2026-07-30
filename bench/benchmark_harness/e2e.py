@@ -175,6 +175,15 @@ def adapters(include_optional: bool, adapter_set: str = "all") -> list[Adapter]:
             Adapter("luminawaf", "diagnostic", required_config(
                 "LUMINA_BENCH_V1_LUMINA_NGINX_CONFIG"), 8081),
         ]
+    if adapter_set == "body-crs":
+        return [
+            Adapter("luminawaf", "crs", required_config(
+                "LUMINA_BENCH_V1_LUMINA_NGINX_CONFIG"), 8081),
+            Adapter("modsecurity", "crs", required_config(
+                "LUMINA_BENCH_V1_MODSEC_NGINX_CONFIG"), 8082),
+            Adapter("coraza", "crs", required_config(
+                "LUMINA_BENCH_V1_CORAZA_NGINX_CONFIG")),
+        ]
     values = [
         Adapter("baseline", "baseline", required_config(
             "LUMINA_BENCH_V1_BASELINE_NGINX_CONFIG"), 8090),
@@ -196,8 +205,14 @@ def adapters(include_optional: bool, adapter_set: str = "all") -> list[Adapter]:
     return values
 
 
-def render_config(adapter: Adapter, destination: Path, port: int, workers: int,
-                  workload: Path = DEFAULT_WORKLOAD) -> None:
+def render_config(
+    adapter: Adapter,
+    destination: Path,
+    port: int,
+    workers: int,
+    workload: Path = DEFAULT_WORKLOAD,
+    fixed_response_backend: bool = False,
+) -> None:
     prepare_prefix(PREFIX, workload)
     text = adapter.source_config.read_text(encoding="utf-8")
     text, listen_count = re.subn(r"\blisten\s+\d+\s*;", f"listen {port};", text, count=1)
@@ -209,11 +224,24 @@ def render_config(adapter: Adapter, destination: Path, port: int, workers: int,
     )
     if worker_count != 1:
         raise RuntimeError(f"{adapter.name}: cannot replace worker_processes")
-    text, fallback_count = re.subn(
-        r"try_files\s+[^;]+;", "try_files $uri =404;", text, count=1
-    )
+    fallback = "try_files $uri =404;"
+    if fixed_response_backend:
+        fallback = (
+            f"proxy_pass http://127.0.0.1:{port + 1}; "
+            "proxy_http_version 1.1; proxy_set_header Connection \"\";"
+        )
+    text, fallback_count = re.subn(r"try_files\s+[^;]+;", fallback, text, count=1)
     if fallback_count != 1:
         raise RuntimeError(f"{adapter.name}: cannot normalize static response fallback")
+    if fixed_response_backend:
+        closing = text.rfind("}")
+        if closing < 0:
+            raise RuntimeError(f"{adapter.name}: cannot locate the http block terminator")
+        backend = (
+            f"\n  server {{ listen 127.0.0.1:{port + 1}; "
+            "location / { return 204; } }\n"
+        )
+        text = text[:closing] + backend + text[closing:]
     pid = PREFIX / "logs" / f"benchmark_harness_v1_{adapter.name}_{port}.pid"
     text, pid_count = re.subn(r"^pid\s+[^;]+;", f"pid {pid};", text, count=1, flags=re.MULTILINE)
     if pid_count == 0:
@@ -245,7 +273,14 @@ def latency_us(value: str) -> float:
     return float(match.group(1)) * scale
 
 
-def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[str, Any]:
+def parse_wrk(
+    text: str,
+    requested_rate: int | None,
+    min_samples: int,
+    *,
+    expected_status: int | None = None,
+    required_percentiles: set[str] | None = None,
+) -> dict[str, Any]:
     percentiles: dict[str, float] = {}
     wanted = {
         "50.000": "p50", "90.000": "p90", "99.000": "p99",
@@ -254,8 +289,20 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
     for percentile, latency in re.findall(r"^\s*([0-9]+\.[0-9]+)%\s+([0-9.]+(?:us|ms|s))\s*$", text, re.MULTILINE):
         if percentile in wanted and wanted[percentile] not in percentiles:
             percentiles[wanted[percentile]] = latency_us(latency)
+    wrk_percentiles = {"50": "p50", "90": "p90", "99": "p99"}
+    for percentile, latency in re.findall(
+        r"^\s*(50|75|90|99)%\s+([0-9.]+(?:us|ms|s))\s*$",
+        text,
+        re.MULTILINE,
+    ):
+        name = wrk_percentiles.get(percentile)
+        if name is not None and name not in percentiles:
+            percentiles[name] = latency_us(latency)
     requests_match = re.search(r"\b([0-9]+) requests in\b", text)
     rate_match = re.search(r"^Requests/sec:\s*([0-9.]+)", text, re.MULTILINE)
+    histogram_count_match = re.search(
+        r"Total count\s*=\s*([0-9]+)", text
+    )
     errors_match = re.search(r"Non-2xx or 3xx responses:\s*([0-9]+)", text)
     socket_line = re.search(r"^\s*Socket errors:\s*(.+)$", text, re.MULTILINE)
     socket_error_breakdown = {
@@ -268,10 +315,37 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
     socket_errors = sum(socket_error_breakdown.values())
     total = int(requests_match.group(1)) if requests_match else 0
     errors = int(errors_match.group(1)) if errors_match else 0
-    accepted = max(0, total - errors)
+    expected_match = re.search(r"^LuminaExpectedResponses:\s*([0-9]+)", text, re.MULTILINE)
+    unexpected_match = re.search(
+        r"^LuminaUnexpectedResponses:\s*([0-9]+)", text, re.MULTILINE
+    )
+    expected_responses = int(expected_match.group(1)) if expected_match else None
+    unexpected_responses = int(unexpected_match.group(1)) if unexpected_match else None
+    accepted = (
+        expected_responses
+        if expected_status is not None and expected_responses is not None
+        else max(0, total - errors)
+    )
+    histogram_samples = (
+        int(histogram_count_match.group(1))
+        if histogram_count_match is not None else None
+    )
+    latency_samples = (
+        histogram_samples if requested_rate is not None else accepted
+    )
     achieved = float(rate_match.group(1)) if rate_match else 0.0
     reasons: list[str] = []
-    if errors:
+    if expected_status is not None:
+        if expected_responses is None or unexpected_responses is None:
+            reasons.append("missing exact response outcome counters")
+        else:
+            if expected_responses + unexpected_responses != total:
+                reasons.append(
+                    "response outcome counters do not equal completed requests"
+                )
+            if unexpected_responses:
+                reasons.append(f"unexpected responses={unexpected_responses}")
+    elif errors:
         reasons.append(f"non-success responses={errors}")
     if socket_line and len(socket_error_breakdown) != 4:
         reasons.append("unparsed socket error counters")
@@ -279,15 +353,36 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
         reasons.append(f"socket errors={socket_errors}")
     if requested_rate is not None and achieved < requested_rate * 0.90:
         reasons.append(f"achieved rate {achieved:.2f} < 90% of {requested_rate}")
-    if requested_rate is not None and accepted < min_samples:
+    if accepted < min_samples:
         reasons.append(f"accepted samples {accepted} < {min_samples}")
-    required_percentiles = {"p50", "p90", "p99", "p99_9"}
-    if requested_rate is not None and not required_percentiles <= set(percentiles):
+    required = (
+        required_percentiles
+        if required_percentiles is not None
+        else ({"p50", "p90", "p99", "p99_9"} if requested_rate is not None else set())
+    )
+    if not required <= set(percentiles):
         reasons.append("missing required raw percentiles")
+    if requested_rate is not None and histogram_samples is None:
+        reasons.append("missing wrk2 histogram sample count")
+    elif requested_rate is not None and histogram_samples == 0:
+        reasons.append("empty wrk2 latency histogram")
+    elif (
+        requested_rate is not None
+        and histogram_samples is not None
+        and histogram_samples < min_samples
+    ):
+        reasons.append(
+            f"latency samples {histogram_samples} < {min_samples}"
+        )
     return {
         "requests": total,
         "accepted_requests": accepted,
+        "latency_samples": latency_samples,
+        "histogram_samples": histogram_samples,
         "non_success": errors,
+        "expected_status": expected_status,
+        "expected_responses": expected_responses,
+        "unexpected_responses": unexpected_responses,
         "socket_errors": socket_errors,
         "socket_error_breakdown": socket_error_breakdown,
         "requests_per_second": achieved,
@@ -299,8 +394,10 @@ def parse_wrk(text: str, requested_rate: int | None, min_samples: int) -> dict[s
 
 SATURATION_OVERLOAD_REASON_PREFIXES = (
     "non-success responses=",
+    "unexpected responses=",
     "socket errors=",
 )
+DEFAULT_MAX_CLIENT_UTILIZATION_PERCENT = 90.0
 
 
 def evaluate_measurement_validity(
@@ -481,7 +578,8 @@ class NginxLeg:
 
 
 def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: int,
-            connections: int, rate: int | None, script: Path) -> LoadRun:
+            connections: int, rate: int | None, script: Path,
+            request_timeout: str | None = None) -> LoadRun:
     client_cpus = parse_cpu_set(client_cpu)
     if threads < 1:
         raise RuntimeError("load-generator threads must be positive")
@@ -496,6 +594,8 @@ def run_wrk(binary: Path, client_cpu: str, port: int, duration: str, threads: in
         "taskset", "-c", client_cpu, str(binary), f"-t{threads}", f"-c{connections}",
         f"-d{duration}", "-L", "-s", str(script),
     ]
+    if request_timeout is not None:
+        command.extend(["--timeout", request_timeout])
     if rate is not None:
         command.append(f"-R{rate}")
     command.append(f"http://127.0.0.1:{port}")
@@ -527,11 +627,39 @@ def effective_load_threads(configured_threads: int, connections: int) -> int:
     return min(configured_threads, connections)
 
 
-def write_wrk_script(workload: Path, destination: Path) -> int:
+def selected_workload_requests(
+    workload: Path, request_class: str
+) -> tuple[list[dict[str, Any]], int | None]:
     raw = json.loads(workload.read_text(encoding="utf-8"))
-    requests = [item for item in raw.get("requests", []) if item.get("class") == "allow"]
+    requests = [
+        item for item in raw.get("requests", [])
+        if item.get("class") == request_class
+    ]
     if not requests:
-        raise RuntimeError("workload has no predeclared allow requests")
+        raise RuntimeError(
+            f"workload has no predeclared {request_class} requests"
+        )
+    expected_statuses = {
+        int(item["expected_status"])
+        for item in requests
+        if item.get("expected_status") is not None
+    }
+    if expected_statuses and len(expected_statuses) != 1:
+        raise RuntimeError(
+            "one E2E workload class must use one exact expected HTTP status"
+        )
+    if expected_statuses and len(expected_statuses) != len(requests):
+        raise RuntimeError(
+            "expected_status must be declared by every selected request"
+        )
+    expected_status = next(iter(expected_statuses)) if expected_statuses else None
+    return requests, expected_status
+
+
+def write_wrk_script(
+    workload: Path, destination: Path, request_class: str = "allow"
+) -> int:
+    requests, expected_status = selected_workload_requests(workload, request_class)
     rows: list[str] = []
     for item in requests:
         query = item.get("query", "")
@@ -539,7 +667,8 @@ def write_wrk_script(workload: Path, destination: Path) -> int:
         header_names = [str(name).lower() for name, _ in item.get("headers", [])]
         if header_names.count("host") != 1:
             raise RuntimeError(
-                f"allow request {item.get('id', '<unknown>')} must declare exactly one Host header"
+                f"{request_class} request {item.get('id', '<unknown>')} must declare "
+                "exactly one Host header"
             )
         headers = ", ".join(
             f"[{json.dumps(str(name))}]={json.dumps(str(value))}"
@@ -553,25 +682,56 @@ def write_wrk_script(workload: Path, destination: Path) -> int:
             + ", body=" + lua_body
             + ", headers={" + headers + "}}"
         )
-    destination.write_text(
+    script = (
         "local requests = {\n" + ",\n".join(rows) + "\n}\n"
         "local index = 0\n"
         "request = function()\n"
         "  index = (index % #requests) + 1\n"
         "  local r = requests[index]\n"
         "  return wrk.format(r.method, r.target, r.headers, r.body)\n"
-        "end\n",
-        encoding="utf-8",
+        "end\n"
     )
+    if expected_status is not None:
+        script += (
+            "local threads = {}\n"
+            "setup = function(thread)\n"
+            "  table.insert(threads, thread)\n"
+            "end\n"
+            "init = function(args)\n"
+            "  expected_responses = 0\n"
+            "  unexpected_responses = 0\n"
+            "end\n"
+            "response = function(status, headers, body)\n"
+            f"  if status == {expected_status} then\n"
+            "    expected_responses = expected_responses + 1\n"
+            "  else\n"
+            "    unexpected_responses = unexpected_responses + 1\n"
+            "  end\n"
+            "end\n"
+            "done = function(summary, latency, requests_done)\n"
+            "  local expected = 0\n"
+            "  local unexpected = 0\n"
+            "  for _, thread in ipairs(threads) do\n"
+            "    expected = expected + (thread:get('expected_responses') or 0)\n"
+            "    unexpected = unexpected + (thread:get('unexpected_responses') or 0)\n"
+            "  end\n"
+            "  io.write(string.format('LuminaExpectedResponses: %d\\n', expected))\n"
+            "  io.write(string.format('LuminaUnexpectedResponses: %d\\n', unexpected))\n"
+            "end\n"
+        )
+    destination.write_text(script, encoding="utf-8")
     return len(requests)
 
 
-def probe_allow_responses(workload: Path, port: int) -> dict[str, dict[str, Any]]:
-    payload = json.loads(workload.read_text(encoding="utf-8"))
+def probe_responses(
+    workload: Path,
+    port: int,
+    request_class: str = "allow",
+    timeout_seconds: float = 2.0,
+) -> dict[str, dict[str, Any]]:
+    requests, _ = selected_workload_requests(workload, request_class)
     contract: dict[str, dict[str, Any]] = {}
-    for item in payload.get("requests", []):
-        if item.get("class") != "allow":
-            continue
+    for item in requests:
         query = str(item.get("query", ""))
         target = str(item["path"]) + (("?" + query) if query else "")
         body = str(item.get("body", "")).encode("utf-8")
@@ -582,17 +742,21 @@ def probe_allow_responses(workload: Path, port: int) -> dict[str, dict[str, Any]
             method=str(item.get("method", "GET")),
         )
         try:
-            with urllib.request.urlopen(request, timeout=2.0) as response:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
                 response_body = response.read()
                 status = response.status
         except urllib.error.HTTPError as error:
             response_body = error.read()
             status = error.code
-        contract[str(item["id"])] = {
-            "status": status,
-            "body_sha256": hashlib.sha256(response_body).hexdigest(),
-        }
+        row: dict[str, Any] = {"status": status}
+        if request_class == "allow":
+            row["body_sha256"] = hashlib.sha256(response_body).hexdigest()
+        contract[str(item["id"])] = row
     return contract
+
+
+def probe_allow_responses(workload: Path, port: int) -> dict[str, dict[str, Any]]:
+    return probe_responses(workload, port, "allow")
 
 
 def rotated_order(items: list[Adapter], repetition: int) -> list[Adapter]:
@@ -606,7 +770,10 @@ def rotated_order(items: list[Adapter], repetition: int) -> list[Adapter]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("fixed", "saturation"), required=True)
-    parser.add_argument("--adapter-set", choices=("all", "overhead"), default="all")
+    parser.add_argument(
+        "--adapter-set", choices=("all", "overhead", "body-crs"), default="all"
+    )
+    parser.add_argument("--engine")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--canonical", action="store_true")
     parser.add_argument("--nginx", type=Path, default=Path(os.environ.get("LUMINA_BENCH_V1_NGINX", "nginx")))
@@ -629,9 +796,26 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=19090)
     parser.add_argument("--library-path", default=str(ROOT / "build"))
     parser.add_argument("--workload", type=Path, default=DEFAULT_WORKLOAD)
+    parser.add_argument("--request-class", choices=("allow", "attack"), default="allow")
+    parser.add_argument("--min-samples", type=int)
+    parser.add_argument("--required-percentiles")
+    parser.add_argument("--fixed-response-backend", action="store_true")
+    parser.add_argument("--probe-timeout", type=float, default=2.0)
+    parser.add_argument("--request-timeout")
+    parser.add_argument(
+        "--max-client-utilization",
+        type=float,
+        default=DEFAULT_MAX_CLIENT_UTILIZATION_PERCENT,
+    )
     args = parser.parse_args()
 
     engines = adapters(args.canonical, args.adapter_set)
+    if args.engine:
+        engines = [adapter for adapter in engines if adapter.name == args.engine]
+        if not engines:
+            raise RuntimeError(
+                f"engine {args.engine!r} is not present in adapter set {args.adapter_set!r}"
+            )
     binary = args.wrk2 if args.mode == "fixed" else args.wrk
     if not args.nginx.is_file() or not os.access(args.nginx, os.X_OK):
         raise RuntimeError(f"missing NGINX binary: {args.nginx}")
@@ -651,12 +835,46 @@ def main() -> int:
         raise RuntimeError("canonical mode requires at least five independent repetitions")
     if parse_duration_seconds(args.warmup_duration) <= 0.0:
         raise RuntimeError("warmup duration must be positive")
+    if args.probe_timeout <= 0.0:
+        raise RuntimeError("response probe timeout must be positive")
+    if not 0.0 < args.max_client_utilization < 100.0:
+        raise RuntimeError("client utilization limit must be between 0 and 100")
+    if (
+        args.request_timeout is not None
+        and parse_duration_seconds(args.request_timeout) <= 0.0
+    ):
+        raise RuntimeError("load-generator request timeout must be positive")
 
     args.output.mkdir(parents=True, exist_ok=False)
-    wrk_script = args.output / "allow_workload.lua"
-    workload_requests = write_wrk_script(args.workload, wrk_script)
+    wrk_script = args.output / f"{args.request_class}_workload.lua"
+    workload_requests = write_wrk_script(
+        args.workload, wrk_script, args.request_class
+    )
+    _, expected_status = selected_workload_requests(
+        args.workload, args.request_class
+    )
     workload_sha256 = hashlib.sha256(args.workload.read_bytes()).hexdigest()
-    min_samples = 100_000 if args.canonical else 0
+    min_samples = (
+        args.min_samples
+        if args.min_samples is not None
+        else (100_000 if args.canonical and args.mode == "fixed" else 0)
+    )
+    if min_samples < 0:
+        raise RuntimeError("minimum sample count cannot be negative")
+    required_percentiles = {
+        value
+        for value in (
+            args.required_percentiles.split(",")
+            if args.required_percentiles is not None
+            else (["p50", "p90", "p99", "p99_9"] if args.mode == "fixed" else [])
+        )
+        if value
+    }
+    unknown_percentiles = required_percentiles - {"p50", "p90", "p99", "p99_9"}
+    if unknown_percentiles:
+        raise RuntimeError(
+            f"unknown required percentiles: {sorted(unknown_percentiles)}"
+        )
     connection_points = (
         [args.connections]
         if args.mode == "fixed"
@@ -671,22 +889,41 @@ def main() -> int:
             client_threads = effective_load_threads(args.threads, connections)
             for adapter in rotated_order(engines, repetition):
                 config = args.output / f"nginx_{adapter.name}_{repetition}_{connections}.conf"
-                render_config(adapter, config, args.port, args.workers, args.workload)
+                render_config(
+                    adapter,
+                    config,
+                    args.port,
+                    args.workers,
+                    args.workload,
+                    args.fixed_response_backend,
+                )
                 leg = NginxLeg(args.nginx, config, args.port, args.server_cpu, args.library_path)
                 raw_path = args.output / f"{args.mode}_{repetition:02d}_{connections}_{adapter.name}.txt"
                 try:
                     leg.preflight()
                     leg.start()
-                    response_contract = probe_allow_responses(args.workload, args.port)
+                    response_contract = probe_responses(
+                        args.workload,
+                        args.port,
+                        args.request_class,
+                        args.probe_timeout,
+                    )
                     contract_errors = [
-                        f"allow response {request_id} status={value['status']}"
+                        f"{args.request_class} response {request_id} "
+                        f"status={value['status']} expected={expected_status}"
                         for request_id, value in response_contract.items()
-                        if not 200 <= int(value["status"]) < 400
+                        if (
+                            int(value["status"]) != expected_status
+                            if expected_status is not None
+                            else not 200 <= int(value["status"]) < 400
+                        )
                     ]
                     if expected_response_contract is None:
                         expected_response_contract = response_contract
                     elif response_contract != expected_response_contract:
-                        contract_errors.append("allow response status/body hash differs across adapters")
+                        contract_errors.append(
+                            f"{args.request_class} response contract differs across adapters"
+                        )
                     warmup_raw = None
                     warmup_client_thread_affinity = None
                     if args.mode == "fixed":
@@ -696,6 +933,7 @@ def main() -> int:
                         warmup = run_wrk(
                             binary, args.client_cpu, args.port, args.warmup_duration,
                             client_threads, connections, args.rate, wrk_script,
+                            args.request_timeout,
                         )
                         warmup_path.write_text(
                             warmup.stdout + warmup.stderr, encoding="utf-8"
@@ -711,12 +949,19 @@ def main() -> int:
                     process = run_wrk(
                         binary, args.client_cpu, args.port, args.duration, client_threads,
                         connections, args.rate if args.mode == "fixed" else None, wrk_script,
+                        args.request_timeout,
                     )
                     client_cpu_seconds = max(0.0, child_cpu_seconds() - client_cpu_before)
                     raw = process.stdout + process.stderr
                     cpu_after = leg.cpu_seconds()
                     raw_path.write_text(raw, encoding="utf-8")
-                    parsed = parse_wrk(raw, args.rate if args.mode == "fixed" else None, min_samples)
+                    parsed = parse_wrk(
+                        raw,
+                        args.rate if args.mode == "fixed" else None,
+                        min_samples,
+                        expected_status=expected_status,
+                        required_percentiles=required_percentiles,
+                    )
                     if process.returncode != 0:
                         parsed["valid"] = False
                         parsed["invalid_reasons"].append(f"load generator exit={process.returncode}")
@@ -729,6 +974,7 @@ def main() -> int:
                             "table": adapter.table,
                             "repetition": repetition,
                             "round_id": f"{args.adapter_set}-r{repetition:02d}-c{connections}",
+                            "request_class": args.request_class,
                             "connections": connections,
                             "server_cpu": args.server_cpu,
                             "client_cpu": args.client_cpu,
@@ -766,10 +1012,22 @@ def main() -> int:
                             ).split()[0],
                             "normalized_config_sha256": normalized_config_sha256(config),
                             "workload_sha256": workload_sha256,
-                            "allow_response_contract": response_contract,
-                            "allow_response_contract_sha256": hashlib.sha256(
+                            "response_contract": response_contract,
+                            "response_contract_sha256": hashlib.sha256(
                                 json.dumps(response_contract, sort_keys=True).encode("utf-8")
                             ).hexdigest(),
+                            "allow_response_contract": (
+                                response_contract
+                                if args.request_class == "allow" else None
+                            ),
+                            "allow_response_contract_sha256": (
+                                hashlib.sha256(
+                                    json.dumps(
+                                        response_contract, sort_keys=True
+                                    ).encode("utf-8")
+                                ).hexdigest()
+                                if args.request_class == "allow" else None
+                            ),
                         }
                     )
                     results.append(parsed)
@@ -793,8 +1051,26 @@ def main() -> int:
                 if len(samples) > 1 and mean > 0.0
                 else None
             )
+            client_utilization = [
+                float(item["client_cpu_utilization_percent"])
+                for item in results
+                if item["engine"] == adapter.name
+                and item["connections"] == connections
+                and item["valid"]
+                and item.get("client_cpu_utilization_percent") is not None
+            ]
             required_runs = 5
-            stable = len(samples) >= required_runs and cv is not None and cv <= 5.0
+            client_headroom = (
+                len(client_utilization) == len(samples)
+                and max(client_utilization, default=100.0)
+                <= args.max_client_utilization
+            )
+            stable = (
+                len(samples) >= required_runs
+                and cv is not None
+                and cv <= 5.0
+                and client_headroom
+            )
             stability.append(
                 {
                     "engine": adapter.name,
@@ -802,6 +1078,15 @@ def main() -> int:
                     "valid_runs": len(samples),
                     "median_rps": statistics.median(samples) if samples else 0.0,
                     "cv_percent": cv,
+                    "client_cpu_utilization_median_percent": (
+                        statistics.median(client_utilization)
+                        if client_utilization else None
+                    ),
+                    "client_cpu_utilization_max_percent": (
+                        max(client_utilization) if client_utilization else None
+                    ),
+                    "max_client_utilization_percent": args.max_client_utilization,
+                    "client_headroom": client_headroom,
                     "diagnostic_available": len(samples) >= 1,
                     "stable": stable,
                     "sustainable": args.mode == "saturation" and stable,
@@ -842,6 +1127,7 @@ def main() -> int:
         "requested_rate": args.rate if args.mode == "fixed" else None,
         "server_cpu": args.server_cpu,
         "client_cpu": args.client_cpu,
+        "max_client_utilization_percent": args.max_client_utilization,
         "workers": args.workers,
         "client_threads": args.threads,
         "client_thread_policy": "min(configured_threads, connections)",
@@ -850,7 +1136,16 @@ def main() -> int:
         "connection_points": connection_points,
         "workload": str(args.workload.resolve()),
         "workload_sha256": workload_sha256,
-        "workload_allow_requests": workload_requests,
+        "workload_request_class": args.request_class,
+        "workload_requests": workload_requests,
+        "workload_allow_requests": (
+            workload_requests if args.request_class == "allow" else 0
+        ),
+        "expected_status": expected_status,
+        "minimum_samples": min_samples,
+        "required_percentiles": sorted(required_percentiles),
+        "fixed_response_backend": args.fixed_response_backend,
+        "request_timeout": args.request_timeout,
         "results": results,
         "stability": stability,
         "identity_errors": identity_errors,

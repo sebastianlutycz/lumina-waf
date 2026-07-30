@@ -489,6 +489,130 @@ def compile_mandatory_seed_cover(pattern, min_seed_len=1, max_seeds=16):
     return {"seeds": seeds, "ignore_case": ignore_case}
 
 
+def compile_alphabet_requirement_dnf(pattern, alternative_budget=1024,
+                                     requirement_budget=16384):
+    """Compile a sound byte-presence precondition for a regular expression.
+
+    Each returned alternative is a conjunction of 256-bit byte-class masks.
+    A conjunction is possible only when the input alphabet intersects every
+    mask; the complete expression is possible when any conjunction survives.
+    Ordering, multiplicity and assertions are deliberately ignored, so this
+    is a rejection-only gate and never a match decision.
+
+    Unsupported or nullable shapes return None. Budget exhaustion also returns
+    None, preserving the exact matcher as the conservative fallback.
+    """
+    ast, ignore_case, dot_all = parse_regex_ast(pattern)
+    builder = ThompsonBuilder(ignore_case, dot_all)
+
+    def simplify_conjunction(requirements):
+        unique = []
+        for mask in requirements:
+            # The caller only uses this gate for non-empty values.
+            if mask == ALL_BYTES:
+                continue
+            if mask not in unique:
+                unique.append(mask)
+        # If A is a subset of B, observing A also satisfies B.
+        return tuple(sorted(
+            mask for mask in unique
+            if not any(other != mask and (other & mask) == other
+                       for other in unique)
+        ))
+
+    def simplify_dnf(alternatives):
+        result = []
+        seen = set()
+        for alternative in alternatives:
+            normalized = simplify_conjunction(alternative)
+            if not normalized:
+                return ((),)
+            if normalized not in seen:
+                seen.add(normalized)
+                result.append(normalized)
+        # An alternative with a strict subset of identical requirements
+        # subsumes the more restrictive alternative in an OR expression.
+        sets = [frozenset(alternative) for alternative in result]
+        keep = [
+            alternative
+            for index, alternative in enumerate(result)
+            if not any(other < sets[index] for other in sets)
+        ]
+        return tuple(keep)
+
+    requirement_count = 0
+
+    def sequence(nodes):
+        nonlocal requirement_count
+        alternatives = ((),)
+        for node_type, value in nodes:
+            child = node(node_type, value)
+            if child == ((),):
+                continue
+            if len(alternatives) * len(child) > alternative_budget:
+                raise UnsupportedRegex("alphabet DNF alternative budget exceeded")
+            alternatives = simplify_dnf(
+                left + right
+                for left in alternatives
+                for right in child
+            )
+            requirement_count = sum(len(item) for item in alternatives)
+            if (len(alternatives) > alternative_budget or
+                    requirement_count > requirement_budget):
+                raise UnsupportedRegex("alphabet DNF requirement budget exceeded")
+        return alternatives
+
+    def node(node_type, value):
+        name = getattr(node_type, "name", str(node_type))
+        try:
+            if name == "LITERAL":
+                if value >= 256:
+                    return ((),)
+                return ((builder.literal_mask(value),),)
+            if name == "NOT_LITERAL":
+                if value >= 256:
+                    return ((),)
+                return ((ALL_BYTES ^ builder.literal_mask(value),),)
+            if name == "IN":
+                return ((builder.class_mask(value),),)
+            if name == "CATEGORY":
+                return ((builder.class_mask([(node_type, value)]),),)
+            if name == "ANY":
+                mask = ALL_BYTES if dot_all else ALL_BYTES ^ (1 << ord("\n"))
+                return ((mask,),)
+            if name == "SUBPATTERN":
+                return sequence(value[3])
+            if name == "BRANCH":
+                alternatives = []
+                for branch in value[1]:
+                    alternatives.extend(sequence(branch))
+                    if len(alternatives) > alternative_budget:
+                        raise UnsupportedRegex(
+                            "alphabet DNF alternative budget exceeded")
+                return simplify_dnf(alternatives)
+            if name in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
+                if int(value[0]) == 0:
+                    return ((),)
+                return sequence(value[2])
+            # Assertions and unsupported stateful nodes add no byte
+            # requirement. This loses rejection opportunities but cannot
+            # create a false negative.
+            return ((),)
+        except UnsupportedRegex:
+            return ((),)
+
+    try:
+        alternatives = simplify_dnf(sequence(ast))
+    except UnsupportedRegex:
+        return None
+    if alternatives == ((),):
+        return None
+    return {
+        "alternatives": alternatives,
+        "ignore_case": ignore_case,
+    }
+
+
 def dfa_match(dfa, data, offset=0):
     """Build-time reference executor used only by translator unit tests."""
     if isinstance(data, str):
@@ -514,7 +638,7 @@ def emit_dfa_c(rule_id, pattern, state_budget=65535, table_budget=2 * 1024 * 102
                ascii_lower_input=False, ast=None, ast_ignore_case=False,
                ast_dot_all=False, compiled_dfa=None, accept_delegate=None,
                accept_delegate_tristate=None, intern_transition_rows=False,
-               intern_accept_rows=False):
+               intern_accept_rows=False, emit_prefix4_gate=False):
     """Emit one native DFA matcher.
 
     Custom symbols let the translator compose several private predicates into
@@ -639,6 +763,43 @@ static const {index_type(len(eof_rows))} {prefix}_eof_row[{states}] = {{
     dead_action = ""
     if stop_on_dead and dfa["dead_state"] >= 0:
         dead_action = f"\n        if (state == {dfa['dead_state']}u) break;"
+    prefix4_gate = ""
+    if emit_prefix4_gate:
+        gate_name = function_name.replace(
+            "lumina_scan_rule_", "lumina_prefix4_rule_", 1)
+        if dfa["dead_state"] < 0:
+            prefix4_gate = f"""
+__attribute__((visibility("hidden")))
+int {gate_name}(const unsigned char *data, size_t len, size_t offset) {{
+    (void)data; (void)len; (void)offset;
+    return 1;
+}}
+"""
+        else:
+            prefix4_gate = f"""
+__attribute__((visibility("hidden")))
+int {gate_name}(const unsigned char *data, size_t len, size_t offset) {{
+    if (offset > len || len - offset < 4u) return 1;
+    uint32_t state = 0;
+    uint32_t previous_word = offset > 0 && ((data[offset-1] >= '0' && data[offset-1] <= '9') ||
+        (data[offset-1] >= 'A' && data[offset-1] <= 'Z') ||
+        (data[offset-1] >= 'a' && data[offset-1] <= 'z') || data[offset-1] == '_');
+    uint32_t bol = offset == 0;
+    for (size_t pos = offset; pos < offset + 4u; ++pos) {{
+        unsigned char input_byte = data[pos];
+        {"if (input_byte >= 'A' && input_byte <= 'Z') input_byte |= 0x20u;" if ascii_lower_input else ""}
+        uint32_t symbol = {prefix}_class[input_byte] + {dfa['class_count']}u * (previous_word + 2u * bol);
+        if ({accept_expr}) return 1;
+        state = {prefix}_transition[{transition_row_expr} * {symbols}u + symbol];
+        if (state == {dfa['dead_state']}u) return 0;
+        unsigned char byte = input_byte;
+        previous_word = (byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'Z') ||
+            (byte >= 'a' && byte <= 'z') || byte == '_';
+        bol = 0;
+    }}
+    return 1;
+}}
+"""
     if accept_delegate_tristate:
         accept_action = (
             f"if ({accept_expr}) {{ int delegated = "
@@ -715,6 +876,7 @@ static const uint8_t {prefix}_eof[{len(eof_accepts)}] = {{
     {eof_action}
     return 0;
 }}
+{prefix4_gate}
 """
 
 def compile_bitset_nfa_ast(ast, ignore_case=False, dot_all=False,

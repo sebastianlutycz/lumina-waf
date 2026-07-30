@@ -27,6 +27,14 @@ CACHE = Path(os.environ.get("LUMINA_BENCH_V1_CACHE", ROOT / ".cache/benchmark_ha
 DEFAULT_MODULE_DIR = CACHE / "sources" / f"nginx-{PINS['nginx']['version']}" / "objs"
 DEFAULT_NGINX = DEFAULT_MODULE_DIR / "nginx"
 MAX_PUBLICATION_LOAD_FRACTION = 0.60
+MAX_SATURATION_CLIENT_UTILIZATION_PERCENT = 90.0
+MAX_BASELINE_RPS_PHASE_DELTA_PERCENT = 10.0
+MAX_BASELINE_CPU_PHASE_DELTA_PERCENT = 15.0
+OVERHEAD_MICRO_BOUNDARIES = (
+    ("bundlebuild", "Overhead/LuminaWAF/BundleBuild/AllowRotation"),
+    ("inspectprebuilt", "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation"),
+    ("fulldirect", "Overhead/LuminaWAF/FullDirect/AllowRotation"),
+)
 
 
 def execute(command: list[str], *, cwd: Path, log: Path, env: dict[str, str] | None = None) -> None:
@@ -278,9 +286,16 @@ def validate_benchmark_artifacts(
     if len(paths) != required_processes:
         errors.append(f"micro processes={len(paths)}, required={required_processes}")
     for path in paths:
-        raw = json.loads(path.read_text(encoding="utf-8"))
         counts = {name: 0 for name in expected}
         aggregates = {name: set() for name in expected}
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{path.name}: invalid JSON artifact: {exc}")
+            process_rows.append(
+                {"path": path.name, "raw_repetitions": counts}
+            )
+            continue
         for item in raw.get("benchmarks", []):
             run_name = str(item.get("run_name", "")).removesuffix(
                 f"/repeats:{required_repetitions}"
@@ -356,6 +371,31 @@ def validate_artifact_manifest(manifest: dict[str, dict[str, object]]) -> dict[s
     return {"schema": 1, "valid": not errors, "checked": checked, "errors": errors}
 
 
+def validate_internal_pl2_coverage(
+    coverage: dict[str, object], manifest: dict[str, object]
+) -> None:
+    contract = coverage.get("reference_contract", {})
+    provenance = coverage.get("provenance", {})
+    universe = coverage.get("universe", {})
+    crs = manifest.get("crs", {})
+    if (
+        coverage.get("internal_only") is not True
+        or not isinstance(contract, dict)
+        or contract.get("modsecurity_runtime_verified") is not False
+        or contract.get("publication_eligible") is not False
+        or not isinstance(provenance, dict)
+        or provenance.get("complete_test_corpus") is not True
+        or provenance.get("scope") != "inbound"
+        or provenance.get("target_pl") != 2
+        or not isinstance(crs, dict)
+        or provenance.get("crs_commit") != crs.get("commit")
+        or not isinstance(universe, dict)
+        or universe.get("source_inbound_rule_count")
+        != crs.get("inbound_pl2_rule_count")
+    ):
+        raise RuntimeError("internal PL2 coverage artifact violates its evidence contract")
+
+
 def cmake_cache_value(path: Path, key: str) -> str:
     prefix = f"{key}:"
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -423,6 +463,7 @@ def create_artifact_manifest(
     module_dir = Path(os.environ.get("LUMINA_BENCH_V1_MODULE_DIR", DEFAULT_MODULE_DIR))
     artifact_paths = {
         "crs_manifest": result / "crs_manifest.json",
+        "source_rule_inventory": result / "source_rule_inventory.json",
         "environment_start": result / "environment.json",
         "configure_log": result / "configure.log",
         "build_log": result / "build.log",
@@ -747,6 +788,297 @@ def summarize_scaling(
     }
 
 
+def rotated_overhead_micro_boundaries(
+    process_index: int,
+) -> list[tuple[str, str]]:
+    boundaries = list(OVERHEAD_MICRO_BOUNDARIES)
+    offset = process_index % len(boundaries)
+    order = boundaries[offset:] + boundaries[:offset]
+    if (process_index // len(boundaries)) % 2:
+        order.reverse()
+    return order
+
+
+def repeated_benchmark_filter(name: str, repetitions: int) -> str:
+    if repetitions < 1:
+        raise RuntimeError("benchmark repetitions must be positive")
+    return rf"^{re.escape(name)}/repeats:{repetitions}$"
+
+
+def relative_delta_percent(left: float, right: float) -> float:
+    denominator = min(left, right)
+    if denominator <= 0.0:
+        return math.inf
+    return abs(left - right) / denominator * 100.0
+
+
+def baseline_phase_consistency(
+    main_saturation: dict[str, object],
+    overhead_saturation: dict[str, object],
+    *,
+    required_connections: set[int],
+    required_runs: int,
+    require_stable: bool,
+    max_rps_delta_percent: float = MAX_BASELINE_RPS_PHASE_DELTA_PERCENT,
+    max_cpu_delta_percent: float = MAX_BASELINE_CPU_PHASE_DELTA_PERCENT,
+) -> dict[str, object]:
+    if required_runs < 1:
+        raise RuntimeError("baseline consistency requires at least one run")
+    if max_rps_delta_percent <= 0.0 or max_cpu_delta_percent <= 0.0:
+        raise RuntimeError("baseline consistency thresholds must be positive")
+
+    def grouped(payload: dict[str, object]) -> dict[int, list[dict[str, object]]]:
+        groups: dict[int, list[dict[str, object]]] = {}
+        for item in payload.get("results", []):
+            if item.get("engine") != "baseline" or not item.get("valid"):
+                continue
+            groups.setdefault(int(item["connections"]), []).append(item)
+        return groups
+
+    def stability_by_connection(
+        payload: dict[str, object],
+    ) -> dict[int, dict[str, object]]:
+        return {
+            int(item["connections"]): item
+            for item in payload.get("stability", [])
+            if item.get("engine") == "baseline"
+        }
+
+    main_groups = grouped(main_saturation)
+    overhead_groups = grouped(overhead_saturation)
+    shared_connections = sorted(set(main_groups) & set(overhead_groups))
+    main_stability = stability_by_connection(main_saturation)
+    overhead_stability = stability_by_connection(overhead_saturation)
+    errors: list[str] = []
+    rows: list[dict[str, object]] = []
+    missing_required = sorted(required_connections - set(shared_connections))
+    if missing_required:
+        errors.append(
+            "missing shared baseline connection points: "
+            + ", ".join(str(value) for value in missing_required)
+        )
+
+    identity_fields = (
+        "config_sha256",
+        "normalized_config_sha256",
+        "workload_sha256",
+        "allow_response_contract_sha256",
+        "server_cpu",
+        "client_cpu",
+        "workers",
+    )
+    for connections in shared_connections:
+        main_items = main_groups[connections]
+        overhead_items = overhead_groups[connections]
+        row_errors: list[str] = []
+        combined = main_items + overhead_items
+        for field in identity_fields:
+            values = {
+                json.dumps(item.get(field), sort_keys=True)
+                for item in combined
+            }
+            if len(values) != 1:
+                row_errors.append(f"identity mismatch: {field}")
+        if len(main_items) < required_runs:
+            row_errors.append(
+                f"main runs={len(main_items)}, required={required_runs}"
+            )
+        if len(overhead_items) < required_runs:
+            row_errors.append(
+                f"overhead runs={len(overhead_items)}, required={required_runs}"
+            )
+        main_rate = statistics.median(
+            float(item["requests_per_second"]) for item in main_items
+        )
+        overhead_rate = statistics.median(
+            float(item["requests_per_second"]) for item in overhead_items
+        )
+        main_cpu_values = [
+            float(item["server_cpu_ns_per_request"])
+            for item in main_items
+            if item.get("server_cpu_ns_per_request") is not None
+        ]
+        overhead_cpu_values = [
+            float(item["server_cpu_ns_per_request"])
+            for item in overhead_items
+            if item.get("server_cpu_ns_per_request") is not None
+        ]
+        if len(main_cpu_values) != len(main_items):
+            row_errors.append("main CPU/request accounting unavailable")
+        if len(overhead_cpu_values) != len(overhead_items):
+            row_errors.append("overhead CPU/request accounting unavailable")
+        main_cpu = statistics.median(main_cpu_values) if main_cpu_values else None
+        overhead_cpu = (
+            statistics.median(overhead_cpu_values)
+            if overhead_cpu_values else None
+        )
+        rps_delta = relative_delta_percent(main_rate, overhead_rate)
+        cpu_delta = (
+            relative_delta_percent(main_cpu, overhead_cpu)
+            if main_cpu is not None and overhead_cpu is not None
+            else math.inf
+        )
+        if rps_delta > max_rps_delta_percent:
+            row_errors.append(
+                f"RPS phase delta={rps_delta:.2f}% exceeds "
+                f"{max_rps_delta_percent:.2f}%"
+            )
+        if cpu_delta > max_cpu_delta_percent:
+            row_errors.append(
+                f"CPU/request phase delta={cpu_delta:.2f}% exceeds "
+                f"{max_cpu_delta_percent:.2f}%"
+            )
+        main_stable = bool(main_stability.get(connections, {}).get("stable"))
+        overhead_stable = bool(
+            overhead_stability.get(connections, {}).get("stable")
+        )
+        if require_stable and not main_stable:
+            row_errors.append("main baseline point is not stable")
+        if require_stable and not overhead_stable:
+            row_errors.append("overhead baseline point is not stable")
+        rows.append(
+            {
+                "connections": connections,
+                "required": connections in required_connections,
+                "main_runs": len(main_items),
+                "overhead_runs": len(overhead_items),
+                "main_median_rps": main_rate,
+                "overhead_median_rps": overhead_rate,
+                "rps_delta_percent": rps_delta,
+                "main_median_cpu_ns_per_request": main_cpu,
+                "overhead_median_cpu_ns_per_request": overhead_cpu,
+                "cpu_delta_percent": cpu_delta,
+                "main_stable": main_stable,
+                "overhead_stable": overhead_stable,
+                "consistent": not row_errors,
+                "errors": row_errors,
+            }
+        )
+        errors.extend(f"c={connections}: {error}" for error in row_errors)
+    return {
+        "schema": 1,
+        "valid": bool(rows) and not errors,
+        "publication_gate": require_stable,
+        "required_connections": sorted(required_connections),
+        "required_runs_per_phase": required_runs,
+        "max_rps_delta_percent": max_rps_delta_percent,
+        "max_cpu_delta_percent": max_cpu_delta_percent,
+        "rows": rows,
+        "errors": errors,
+    }
+
+
+def run_publication_correctness(
+    result: Path,
+    build_dir: Path,
+    manifest: dict[str, object],
+    env: dict[str, str],
+) -> None:
+    parity_env = env.copy()
+    parity_env["BUILD_DIR"] = str(build_dir)
+    parity_env["LUMINA_WAF_SO"] = str(build_dir / "libluminawaf.so")
+    parity_env["JSON_OUTPUT"] = str(result / "correctness_lumina.json")
+    parity_env["PL2_COVERAGE_OUTPUT"] = str(
+        result / "pl2_coverage_internal.json"
+    )
+    execute(
+        [str(ROOT / "tools/run_crs_parity_gate.sh")],
+        cwd=ROOT,
+        log=result / "correctness_lumina.log",
+        env=parity_env,
+    )
+    if not (result / "correctness_lumina.json").is_file():
+        raise RuntimeError(
+            "Lumina correctness gate did not write structured JSON evidence"
+        )
+    coverage_path = result / "pl2_coverage_internal.json"
+    if not coverage_path.is_file():
+        raise RuntimeError("Lumina correctness gate did not write PL2 coverage evidence")
+    coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+    validate_internal_pl2_coverage(coverage, manifest)
+
+    coraza_output = result / "correctness_coraza.json"
+    execute(
+        [
+            sys.executable,
+            str(HERE / "coraza_correctness.py"),
+            "--go-ftw", os.environ["LUMINA_BENCH_V1_GO_FTW"],
+            "--nginx", os.environ["LUMINA_BENCH_V1_NGINX"],
+            "--nginx-config", os.environ["LUMINA_BENCH_V1_CORAZA_NGINX_CONFIG"],
+            "--tests", str(ROOT / "tests/eval_suite/coreruleset/tests/regression/tests"),
+            "--manifest", str(result / "crs_manifest.json"),
+            "--output", str(coraza_output),
+            "--library-path", env["LD_LIBRARY_PATH"],
+        ],
+        cwd=ROOT,
+        log=result / "correctness_coraza.log",
+        env=env,
+    )
+    if not coraza_output.exists():
+        raise RuntimeError(
+            "Coraza correctness adapter did not write its required JSON output"
+        )
+    coraza_correctness = json.loads(
+        coraza_output.read_text(encoding="utf-8")
+    )
+    required_coraza = {
+        "crs_manifest_sha256": manifest["manifest_sha256"],
+        "correctness_mode": "http-verdict",
+        "exact_rule_id_observable": False,
+        "timeouts": 0,
+        "exceptions": 0,
+    }
+    for key, expected in required_coraza.items():
+        if coraza_correctness.get(key) != expected:
+            raise RuntimeError(
+                f"Coraza correctness {key} does not match canonical contract"
+            )
+    if float(coraza_correctness.get("overall_parity", 0.0)) < 99.70:
+        raise RuntimeError("Coraza correctness is below the 99.70% gate")
+    if coraza_correctness.get("outcome_overrides"):
+        raise RuntimeError("Coraza correctness used ignored/forced FTW outcomes")
+    if (
+        coraza_correctness.get("selected_rule_ids")
+        != manifest["crs"]["inbound_pl2_rule_ids"]
+    ):
+        raise RuntimeError(
+            "Coraza correctness did not execute the manifest PL2 inventory"
+        )
+    if int(coraza_correctness.get("tests", 0)) == 0:
+        raise RuntimeError("Coraza correctness evaluated zero in-scope tests")
+
+
+def run_outcome_matrix(
+    result: Path,
+    build_dir: Path,
+    env: dict[str, str],
+    publication_data: bool,
+) -> bool:
+    command = [
+        sys.executable,
+        str(HERE / "correctness.py"),
+        "--output", str(result / "correctness_matrix"),
+        "--workload", str(HERE / "workloads/requests.json"),
+        "--nginx", os.environ.get(
+            "LUMINA_BENCH_V1_NGINX", str(DEFAULT_NGINX)
+        ),
+        "--library-path", env["LD_LIBRARY_PATH"],
+        "--server-cpu", os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1"),
+    ]
+    if publication_data:
+        command.append("--canonical")
+    execute(
+        command,
+        cwd=ROOT,
+        log=result / "correctness_matrix.log",
+        env=env,
+    )
+    matrix = json.loads(
+        (result / "correctness_matrix/results.json").read_text(encoding="utf-8")
+    )
+    return bool(matrix["valid"])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("smoke", "exploratory", "qualification", "canonical"))
@@ -781,10 +1113,23 @@ def main() -> int:
     overhead_pmu_qualification: dict[str, object] = {
         "valid": False, "reason": "PMU is collected only in qualified modes"
     }
+    body_pmu_qualification: dict[str, object] = {
+        "valid": False, "reason": "body PMU is collected only in qualified modes"
+    }
     if publication_data:
         manifest_command.extend(["--strict", "--require-coraza"])
     execute(manifest_command, cwd=ROOT, log=result / "manifest.log")
     manifest = json.loads((result / "crs_manifest.json").read_text(encoding="utf-8"))
+    source_rule_inventory = {
+        "schema": 1,
+        **manifest["lumina"]["source_rule_inventory_summary"],
+        "rules": manifest["lumina"]["source_rule_inventory"],
+        "crs_manifest_sha256": manifest["manifest_sha256"],
+    }
+    (result / "source_rule_inventory.json").write_text(
+        json.dumps(source_rule_inventory, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     required = ["cmake", "perf", "readelf", "taskset"]
     if publication_data:
@@ -879,6 +1224,32 @@ def main() -> int:
     benchmark_filter = "FullTransaction/(" + "|".join(micro_engines) + ").*"
     env = os.environ.copy()
     env["LD_LIBRARY_PATH"] = f"{args.build_dir}:{env.get('LD_LIBRARY_PATH', '')}"
+    phases = {
+        "manifest": "passed",
+        "artifacts": "passed",
+        "micro": "not-run",
+        "lumina_crs": "not-run",
+        "coraza_crs": "not-run",
+        "outcome_matrix": "not-run",
+        "e2e": "not-run",
+        "execution_preflight": "not-run",
+        "overhead": "not-run",
+        "body": "not-run",
+        "baseline_consistency": "not-run",
+        "scaling": "not-requested",
+    }
+    if publication_data:
+        run_publication_correctness(result, args.build_dir, manifest, env)
+        phases["lumina_crs"] = "passed"
+        phases["coraza_crs"] = "passed"
+    matrix_valid = run_outcome_matrix(
+        result, args.build_dir, env, publication_data
+    )
+    phases["outcome_matrix"] = "passed" if matrix_valid else "invalid"
+    if publication_data and not matrix_valid:
+        raise RuntimeError(
+            "cross-engine outcome matrix failed before performance measurement"
+        )
     process_repetitions = 5 if publication_data else (1 if args.mode == "smoke" else 3)
     micro_cpu = os.environ.get(
         "LUMINA_BENCH_V1_MICRO_CPU", os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1")
@@ -908,10 +1279,10 @@ def main() -> int:
     )
     if not micro_qualification["valid"]:
         raise RuntimeError("Google Benchmark evidence is incomplete")
-    overhead_names = {
-        "Overhead/LuminaWAF/BundleBuild/AllowRotation",
-        "Overhead/LuminaWAF/InspectPrebuilt/AllowRotation",
-        "Overhead/LuminaWAF/FullDirect/AllowRotation",
+    body_micro_names = {
+        f"FullTransaction128KiB/{engine}/{workload}"
+        for engine in micro_engines
+        for workload in ("AllowJSON", "AllowJSONVaried")
     }
     for process_index in range(process_repetitions):
         suffix = "" if process_index == 0 else f"_process_{process_index:02d}"
@@ -919,20 +1290,82 @@ def main() -> int:
             [
                 "taskset", "-c", micro_cpu,
                 str(args.build_dir / "lumina_benchmark_harness"),
-                "--benchmark_filter=Overhead/LuminaWAF/.*",
-                "--benchmark_min_time=0.10s" if args.mode == "smoke" else "--benchmark_min_time=1s",
+                "--benchmark_filter=FullTransaction128KiB/.*",
+                "--benchmark_min_time=0.10s" if args.mode == "smoke"
+                else "--benchmark_min_time=1s",
                 "--benchmark_report_aggregates_only=false",
                 "--benchmark_out_format=json",
-                f"--benchmark_out={result / ('overhead_micro' + suffix + '.json')}",
+                f"--benchmark_out={result / ('body_micro' + suffix + '.json')}",
             ],
             cwd=ROOT,
-            log=result / ("overhead_micro" + suffix + ".log"),
+            log=result / ("body_micro" + suffix + ".log"),
             env=env,
         )
-    overhead_micro_qualification = validate_benchmark_artifacts(
-        sorted(result.glob("overhead_micro*.json")), overhead_names,
-        process_repetitions, 10,
+    body_micro_qualification = validate_benchmark_artifacts(
+        sorted(result.glob("body_micro*.json")),
+        body_micro_names,
+        process_repetitions,
+        10,
     )
+    body_micro_qualification["cpu_set"] = micro_cpu
+    (result / "body_micro_qualification.json").write_text(
+        json.dumps(body_micro_qualification, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    if not body_micro_qualification["valid"]:
+        raise RuntimeError("request-body Google Benchmark evidence is incomplete")
+    overhead_artifacts: dict[str, list[Path]] = {
+        name: [] for _, name in OVERHEAD_MICRO_BOUNDARIES
+    }
+    overhead_execution_order: list[dict[str, object]] = []
+    for process_index in range(process_repetitions):
+        suffix = "" if process_index == 0 else f"_process_{process_index:02d}"
+        order = rotated_overhead_micro_boundaries(process_index)
+        overhead_execution_order.append(
+            {
+                "process_index": process_index,
+                "boundaries": [name for _, name in order],
+            }
+        )
+        for slug, name in order:
+            stem = f"overhead_micro_{slug}{suffix}"
+            output_path = result / f"{stem}.json"
+            execute(
+                [
+                    "taskset", "-c", micro_cpu,
+                    str(args.build_dir / "lumina_benchmark_harness"),
+                    f"--benchmark_filter={repeated_benchmark_filter(name, 10)}",
+                    "--benchmark_min_time=0.10s"
+                    if args.mode == "smoke" else "--benchmark_min_time=1s",
+                    "--benchmark_report_aggregates_only=false",
+                    "--benchmark_out_format=json",
+                    f"--benchmark_out={output_path}",
+                ],
+                cwd=ROOT,
+                log=result / f"{stem}.log",
+                env=env,
+            )
+            overhead_artifacts[name].append(output_path)
+    overhead_boundary_qualification: dict[str, dict[str, object]] = {}
+    overhead_errors: list[str] = []
+    for _, name in OVERHEAD_MICRO_BOUNDARIES:
+        evidence = validate_benchmark_artifacts(
+            overhead_artifacts[name], {name}, process_repetitions, 10
+        )
+        overhead_boundary_qualification[name] = evidence
+        overhead_errors.extend(
+            f"{name}: {error}" for error in evidence["errors"]
+        )
+    overhead_micro_qualification = {
+        "schema": 2,
+        "valid": not overhead_errors,
+        "execution_model": "one boundary per process",
+        "required_processes_per_boundary": process_repetitions,
+        "required_repetitions": 10,
+        "execution_order": overhead_execution_order,
+        "boundaries": overhead_boundary_qualification,
+        "errors": overhead_errors,
+    }
     overhead_micro_qualification["cpu_set"] = micro_cpu
     (result / "overhead_micro_qualification.json").write_text(
         json.dumps(overhead_micro_qualification, indent=2, sort_keys=True) + "\n",
@@ -940,6 +1373,7 @@ def main() -> int:
     )
     if not overhead_micro_qualification["valid"]:
         raise RuntimeError("overhead Google Benchmark evidence is incomplete")
+    phases["micro"] = "passed"
     if publication_data and "Library was built as DEBUG" in (result / "micro.log").read_text(encoding="utf-8"):
         raise RuntimeError("qualified modes reject a DEBUG Google Benchmark library")
     if publication_data:
@@ -1012,6 +1446,38 @@ def main() -> int:
         }
         if not overhead_pmu_qualification["valid"]:
             raise RuntimeError("qualified overhead PMU evidence is incomplete or multiplexed")
+        body_pmu_rows = []
+        for engine in ("LuminaWAF", "ModSecurity", "Coraza"):
+            pmu_path = result / f"body_pmu_{engine.lower()}.csv"
+            for group_index, group in enumerate(pmu_groups):
+                append = ["--append"] if group_index else []
+                execute_pmu_group(
+                    [
+                        "perf", "stat", "-x,", "-o", str(pmu_path), *append,
+                        "-e", group,
+                        "taskset", "-c", micro_cpu,
+                        str(args.build_dir / "lumina_benchmark_harness"),
+                        f"--benchmark_filter=FullTransaction128KiB/{engine}/AllowJSONVaried",
+                        "--benchmark_min_time=1s", "--benchmark_repetitions=1",
+                    ],
+                    cwd=ROOT,
+                    log=result / f"body_pmu_{engine.lower()}_group_{group_index:02d}.log",
+                    csv_path=pmu_path,
+                    events=tuple(group.strip("{}").split(",")),
+                    env=env,
+                )
+            row = validate_pmu_csv(pmu_path)
+            row["engine"] = engine.lower()
+            row["workload"] = "128 KiB varied JSON allow transaction"
+            body_pmu_rows.append(row)
+        body_pmu_qualification = {
+            "schema": 1,
+            "valid": all(row["valid"] for row in body_pmu_rows),
+            "required_minimum_running_percent": 90.0,
+            "rows": body_pmu_rows,
+        }
+        if not body_pmu_qualification["valid"]:
+            raise RuntimeError("qualified body PMU evidence is incomplete or multiplexed")
     (result / "pmu_qualification.json").write_text(
         json.dumps(pmu_qualification, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1020,79 +1486,10 @@ def main() -> int:
         json.dumps(overhead_pmu_qualification, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-
-    phases = {
-        "manifest": "passed", "artifacts": "passed", "micro": "passed",
-        "lumina_crs": "not-run",
-        "coraza_crs": "not-run", "outcome_matrix": "not-run", "e2e": "not-run",
-        "execution_preflight": "not-run", "overhead": "not-run",
-        "scaling": "not-requested",
-    }
-    if publication_data:
-        parity_env = env.copy()
-        parity_env["BUILD_DIR"] = str(args.build_dir)
-        parity_env["LUMINA_WAF_SO"] = str(args.build_dir / "libluminawaf.so")
-        parity_env["JSON_OUTPUT"] = str(result / "correctness_lumina.json")
-        execute(
-            [str(ROOT / "tools/run_crs_parity_gate.sh")], cwd=ROOT,
-            log=result / "correctness_lumina.log", env=parity_env,
-        )
-        phases["lumina_crs"] = "passed"
-        if not (result / "correctness_lumina.json").is_file():
-            raise RuntimeError("Lumina correctness gate did not write structured JSON evidence")
-        coraza_output = result / "correctness_coraza.json"
-        execute(
-            [
-                sys.executable,
-                str(HERE / "coraza_correctness.py"),
-                "--go-ftw", os.environ["LUMINA_BENCH_V1_GO_FTW"],
-                "--nginx", os.environ["LUMINA_BENCH_V1_NGINX"],
-                "--nginx-config", os.environ["LUMINA_BENCH_V1_CORAZA_NGINX_CONFIG"],
-                "--tests", str(ROOT / "tests/eval_suite/coreruleset/tests/regression/tests"),
-                "--manifest", str(result / "crs_manifest.json"),
-                "--output", str(coraza_output),
-                "--library-path", env["LD_LIBRARY_PATH"],
-            ],
-            cwd=ROOT, log=result / "correctness_coraza.log", env=env,
-        )
-        if not coraza_output.exists():
-            raise RuntimeError("Coraza correctness adapter did not write its required JSON output")
-        coraza_correctness = json.loads(coraza_output.read_text(encoding="utf-8"))
-        required_coraza = {
-            "crs_manifest_sha256": manifest["manifest_sha256"],
-            "correctness_mode": "http-verdict",
-            "exact_rule_id_observable": False,
-            "timeouts": 0,
-            "exceptions": 0,
-        }
-        for key, expected in required_coraza.items():
-            if coraza_correctness.get(key) != expected:
-                raise RuntimeError(f"Coraza correctness {key} does not match canonical contract")
-        if float(coraza_correctness.get("overall_parity", 0.0)) < 99.70:
-            raise RuntimeError("Coraza correctness is below the 99.70% gate")
-        if coraza_correctness.get("outcome_overrides"):
-            raise RuntimeError("Coraza correctness used ignored/forced FTW outcomes")
-        if coraza_correctness.get("selected_rule_ids") != manifest["crs"]["inbound_pl2_rule_ids"]:
-            raise RuntimeError("Coraza correctness did not execute the manifest PL2 inventory")
-        if int(coraza_correctness.get("tests", 0)) == 0:
-            raise RuntimeError("Coraza correctness evaluated zero in-scope tests")
-        phases["coraza_crs"] = "passed"
-
-    correctness_command = [
-        sys.executable, str(HERE / "correctness.py"),
-        "--output", str(result / "correctness_matrix"),
-        "--workload", str(HERE / "workloads/requests.json"),
-        "--nginx", os.environ.get("LUMINA_BENCH_V1_NGINX", str(DEFAULT_NGINX)),
-        "--library-path", env["LD_LIBRARY_PATH"],
-        "--server-cpu", os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1"),
-    ]
-    if publication_data:
-        correctness_command.append("--canonical")
-    execute(
-        correctness_command, cwd=ROOT, log=result / "correctness_matrix.log", env=env
+    (result / "body_pmu_qualification.json").write_text(
+        json.dumps(body_pmu_qualification, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
-    matrix = json.loads((result / "correctness_matrix/results.json").read_text(encoding="utf-8"))
-    phases["outcome_matrix"] = "passed" if matrix["valid"] else "invalid"
 
     e2e_base = [
         sys.executable,
@@ -1112,6 +1509,11 @@ def main() -> int:
         os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1"),
         "--client-cpu",
         os.environ.get("LUMINA_BENCH_V1_CLIENT_CPU", "2"),
+        "--max-client-utilization",
+        os.environ.get(
+            "LUMINA_BENCH_V1_MAX_CLIENT_UTILIZATION",
+            str(MAX_SATURATION_CLIENT_UTILIZATION_PERCENT),
+        ),
     ]
     e2e_preflight_common = list(e2e_common)
     if publication_data:
@@ -1168,6 +1570,56 @@ def main() -> int:
     saturation_results = json.loads(
         (result / "e2e_saturation/results.json").read_text(encoding="utf-8")
     )
+    overhead_common = [*e2e_common, "--adapter-set", "overhead"]
+    overhead_saturation_duration = os.environ.get(
+        "LUMINA_BENCH_V1_OVERHEAD_SATURATION_DURATION",
+        "60s" if publication_data else "2s",
+    )
+    overhead_sweep = os.environ.get(
+        "LUMINA_BENCH_V1_OVERHEAD_CONNECTION_SWEEP",
+        "1,10,100" if publication_data else "1,10",
+    )
+    execute(
+        [
+            *overhead_common,
+            "--mode", "saturation",
+            "--output", str(result / "overhead_saturation"),
+            "--duration", overhead_saturation_duration,
+            "--repetitions", repetitions,
+            "--threads", os.environ.get("LUMINA_BENCH_V1_THREADS", "1"),
+            "--connections-sweep", overhead_sweep,
+        ],
+        cwd=ROOT,
+        log=result / "overhead_saturation.log",
+        env=env,
+    )
+    overhead_saturation = json.loads(
+        (result / "overhead_saturation/results.json").read_text(encoding="utf-8")
+    )
+    overhead_fixed_connections = int(
+        os.environ.get("LUMINA_BENCH_V1_OVERHEAD_CONNECTIONS", "10")
+    )
+    baseline_consistency = baseline_phase_consistency(
+        saturation_results,
+        overhead_saturation,
+        required_connections={overhead_fixed_connections},
+        required_runs=5 if publication_data else 1,
+        require_stable=publication_data,
+    )
+    (result / "baseline_phase_consistency.json").write_text(
+        json.dumps(baseline_consistency, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    phases["baseline_consistency"] = (
+        "passed" if baseline_consistency["valid"]
+        else "invalid" if publication_data
+        else "diagnostic-inconsistent"
+    )
+    if publication_data and not baseline_consistency["valid"]:
+        raise RuntimeError(
+            "plain-NGINX baseline is inconsistent across saturation phases; "
+            "see baseline_phase_consistency.json"
+        )
     if publication_data:
         sampling_plan = derive_sampling_plan(
             saturation_results,
@@ -1225,6 +1677,44 @@ def main() -> int:
         "passed" if fixed_results["valid"] and saturation_results["valid"] else "invalid"
     )
 
+    body_evidence_command = [
+        sys.executable,
+        str(HERE / "body_evidence.py"),
+        "--output", str(result / "body_evidence"),
+        "--nginx", os.environ.get("LUMINA_BENCH_V1_NGINX", str(DEFAULT_NGINX)),
+        "--wrk", os.environ.get(
+            "LUMINA_BENCH_V1_WRK", shutil.which("wrk") or "wrk"
+        ),
+        "--wrk2", os.environ.get(
+            "LUMINA_BENCH_V1_WRK2", shutil.which("wrk2") or "wrk2"
+        ),
+        "--library-path", str(args.build_dir),
+        "--server-cpu", os.environ.get("LUMINA_BENCH_V1_SERVER_CPU", "1"),
+        "--client-cpu", os.environ.get("LUMINA_BENCH_V1_CLIENT_CPU", "2"),
+        "--threads", configured_threads,
+        "--repetitions", repetitions,
+        "--saturation-duration", os.environ.get(
+            "LUMINA_BENCH_V1_BODY_SATURATION_DURATION",
+            "30s" if publication_data else "2s",
+        ),
+        "--connections-sweep", os.environ.get(
+            "LUMINA_BENCH_V1_BODY_CONNECTION_SWEEP",
+            "1,10" if publication_data else "1",
+        ),
+    ]
+    if publication_data:
+        body_evidence_command.append("--qualified")
+    execute(
+        body_evidence_command,
+        cwd=ROOT,
+        log=result / "body_evidence.log",
+        env=env,
+    )
+    body_evidence = json.loads(
+        (result / "body_evidence/results.json").read_text(encoding="utf-8")
+    )
+    phases["body"] = "passed" if body_evidence["valid"] else "invalid"
+
     scaling_qualification: dict[str, object] = {
         "schema": 1,
         "requested": scaling_requested,
@@ -1280,6 +1770,8 @@ def main() -> int:
                     "--workers", str(workers),
                     "--server-cpu", str(point["server_cpu"]),
                     "--client-cpu", str(point["client_cpu"]),
+                    "--max-client-utilization",
+                    str(scaling_plan["max_client_utilization_percent"]),
                     "--connections-sweep", str(scaling_plan["connection_sweep"]),
                 ],
                 cwd=ROOT,
@@ -1305,31 +1797,6 @@ def main() -> int:
             "passed" if scaling_qualification["valid"] else "invalid"
         )
 
-    overhead_common = [*e2e_common, "--adapter-set", "overhead"]
-    overhead_saturation_duration = os.environ.get(
-        "LUMINA_BENCH_V1_OVERHEAD_SATURATION_DURATION", "60s" if publication_data else "2s"
-    )
-    overhead_sweep = os.environ.get(
-        "LUMINA_BENCH_V1_OVERHEAD_CONNECTION_SWEEP", "1,10,100" if publication_data else "1,10"
-    )
-    execute(
-        [
-            *overhead_common,
-            "--mode", "saturation",
-            "--output", str(result / "overhead_saturation"),
-            "--duration", overhead_saturation_duration,
-            "--repetitions", repetitions,
-            "--threads", os.environ.get("LUMINA_BENCH_V1_THREADS", "1"),
-            "--connections-sweep", overhead_sweep,
-        ],
-        cwd=ROOT, log=result / "overhead_saturation.log", env=env,
-    )
-    overhead_saturation = json.loads(
-        (result / "overhead_saturation/results.json").read_text(encoding="utf-8")
-    )
-    overhead_fixed_connections = int(
-        os.environ.get("LUMINA_BENCH_V1_OVERHEAD_CONNECTIONS", "10")
-    )
     if publication_data:
         overhead_calibration = {
             "results": [
@@ -1394,20 +1861,26 @@ def main() -> int:
     phases["artifacts"] = "passed" if artifact_postflight["valid"] else "invalid"
     required_phase_names = (
         "manifest", "artifacts", "micro", "lumina_crs", "coraza_crs",
-        "outcome_matrix", "execution_preflight", "e2e", "overhead",
+        "outcome_matrix", "execution_preflight", "e2e", "overhead", "body",
+        "baseline_consistency",
     )
     if scaling_requested:
         required_phase_names += ("scaling",)
     engineering_phase_names = (
         required_phase_names if publication_data
-        else ("manifest", "artifacts", "micro", "outcome_matrix", "e2e", "overhead")
+        else (
+            "manifest", "artifacts", "micro", "outcome_matrix", "e2e",
+            "overhead", "body",
+        )
     )
     failed_phases = [name for name in engineering_phase_names if phases[name] != "passed"]
     canonical = (
         strict and manifest["canonical"] and bool(micro_qualification["valid"])
         and bool(overhead_micro_qualification["valid"])
+        and bool(body_micro_qualification["valid"])
         and bool(pmu_qualification["valid"])
         and bool(overhead_pmu_qualification["valid"])
+        and bool(body_pmu_qualification["valid"])
         and bool(artifact_postflight["valid"])
         and fixed_results["valid"] and saturation_results["valid"]
         and overhead_fixed["valid"] and overhead_saturation["valid"]
@@ -1432,11 +1905,14 @@ def main() -> int:
         "artifact_preflight": artifact_preflight,
         "artifact_postflight": artifact_postflight,
         "micro_qualification": micro_qualification,
+        "body_micro_qualification": body_micro_qualification,
         "overhead_micro_qualification": overhead_micro_qualification,
         "pmu_qualification": pmu_qualification,
+        "body_pmu_qualification": body_pmu_qualification,
         "overhead_pmu_qualification": overhead_pmu_qualification,
         "sampling_plan": sampling_plan,
         "overhead_sampling_plan": overhead_plan,
+        "baseline_phase_consistency": baseline_consistency,
         "scaling_qualification": scaling_qualification,
         "phases": phases,
     }

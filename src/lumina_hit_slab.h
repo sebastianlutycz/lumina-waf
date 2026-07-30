@@ -27,7 +27,7 @@ extern "C" {
  * Replaces the previous 384-slot hashed dedup bitmask with an exact per-rule
  * membership map. Hash collisions can no longer suppress rule scoring.
  *
- * ROLE (ABB):
+ * RESPONSIBILITY:
  *   - Scanners and the AOT short-rule loop MARK their rule idx when a
  *     pattern matches (lumina_slab_mark).
  *   - The resolver decides verdict. For INDEPENDENT rules it OR-sums each

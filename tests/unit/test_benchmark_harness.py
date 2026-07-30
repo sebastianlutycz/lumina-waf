@@ -25,6 +25,12 @@ manifest_module = load_module(
     "harness_manifest", ROOT / "bench/benchmark_harness/manifest.py"
 )
 e2e_module = load_module("harness_e2e", ROOT / "bench/benchmark_harness/e2e.py")
+body_workloads_module = load_module(
+    "body_workloads", ROOT / "bench/benchmark_harness/body_workloads.py"
+)
+body_evidence_module = load_module(
+    "harness_body_evidence", ROOT / "bench/benchmark_harness/body_evidence.py"
+)
 report_module = load_module("harness_report", ROOT / "bench/benchmark_harness/report.py")
 run_module = load_module("harness_run", ROOT / "bench/benchmark_harness/run.py")
 coraza_module = load_module(
@@ -42,6 +48,10 @@ reference_config_module = load_module(
 setup_module = load_module(
     "harness_crs_setup",
     ROOT / "bench/benchmark_harness/generate_crs_setup.py",
+)
+config_generator_module = load_module(
+    "harness_config_generator",
+    ROOT / "bench/benchmark_harness/generate_configs.py",
 )
 
 
@@ -98,6 +108,62 @@ class BenchmarkHarnessTest(unittest.TestCase):
         self.assertIn("LUMINA_BENCH_V1_WRK", launcher + bootstrap + (
             ROOT / "bench/benchmark_harness/prepare_runtime.sh"
         ).read_text(encoding="utf-8"))
+
+    def test_runner_retains_internal_pl2_coverage_without_publishing_it(self):
+        runner = (ROOT / "bench/benchmark_harness/run.py").read_text(
+            encoding="utf-8"
+        )
+        gate = (ROOT / "tools/run_crs_parity_gate.sh").read_text(
+            encoding="utf-8"
+        )
+        report = (ROOT / "bench/benchmark_harness/report.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("PL2_COVERAGE_OUTPUT", runner)
+        self.assertIn("PL2_COVERAGE_OUTPUT", gate)
+        self.assertIn("pl2_coverage_internal.json", runner)
+        self.assertNotIn("pl2_coverage_internal.json", report)
+
+    def test_internal_pl2_coverage_contract_is_fail_closed(self):
+        manifest = {
+            "crs": {
+                "commit": "crs-commit",
+                "inbound_pl2_rule_count": 423,
+            }
+        }
+        coverage = {
+            "internal_only": True,
+            "reference_contract": {
+                "modsecurity_runtime_verified": False,
+                "publication_eligible": False,
+            },
+            "provenance": {
+                "complete_test_corpus": True,
+                "scope": "inbound",
+                "target_pl": 2,
+                "crs_commit": "crs-commit",
+            },
+            "universe": {"source_inbound_rule_count": 423},
+        }
+        run_module.validate_internal_pl2_coverage(coverage, manifest)
+
+        coverage["provenance"]["crs_commit"] = "different-commit"
+        with self.assertRaisesRegex(RuntimeError, "violates its evidence contract"):
+            run_module.validate_internal_pl2_coverage(coverage, manifest)
+
+    def test_modsecurity_comparator_requires_pcre2_jit(self):
+        bootstrap = (
+            ROOT / "bench/benchmark_harness/bootstrap.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("-DPCRE2_SUPPORT_JIT=ON", bootstrap)
+        self.assertIn("PCRE2_SUPPORT_JIT:BOOL=ON", bootstrap)
+        self.assertIn("--argjson pcre2_jit true", bootstrap)
+        self.assertIn("--arg pcre2_sljit_commit", bootstrap)
+        prepare = (
+            ROOT / "bench/benchmark_harness/prepare_runtime.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(".pcre2_jit == true", prepare)
+        self.assertIn(".pcre2_sljit_commit", prepare)
 
     def test_load_threads_are_capped_by_connection_count(self):
         self.assertEqual(e2e_module.effective_load_threads(2, 1), 1)
@@ -165,6 +231,33 @@ class BenchmarkHarnessTest(unittest.TestCase):
             rendered = output.read_text(encoding="utf-8")
             self.assertIn("try_files $uri =404;", rendered)
             self.assertNotIn("/about", rendered)
+
+    def test_body_config_uses_same_process_fixed_response_backend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.conf"
+            source.write_text(
+                "worker_processes 1;\n"
+                "events {}\n"
+                "http { server { listen 8080; location / { "
+                "try_files $uri =404; } } }\n",
+                encoding="utf-8",
+            )
+            output = root / "rendered.conf"
+            adapter = e2e_module.Adapter("luminawaf", "crs", source)
+            with mock.patch.object(e2e_module, "PREFIX", root / "runtime"):
+                e2e_module.render_config(
+                    adapter,
+                    output,
+                    19090,
+                    1,
+                    fixed_response_backend=True,
+                )
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("proxy_pass http://127.0.0.1:19091;", rendered)
+            self.assertIn("listen 127.0.0.1:19091;", rendered)
+            self.assertIn("return 204;", rendered)
+            self.assertNotIn("try_files", rendered)
 
     def test_reference_config_rewrites_host_specific_crs_root(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -291,6 +384,21 @@ class BenchmarkHarnessTest(unittest.TestCase):
         self.assertGreater(payload["crs"]["inbound_pl2_rule_count"], 0)
         self.assertIn(911100, payload["crs"]["inbound_pl2_rule_ids"])
         self.assertGreater(payload["lumina"]["generated_rule_count"], 0)
+        inventory = payload["lumina"]["source_rule_inventory_summary"]
+        self.assertTrue(inventory["valid"])
+        self.assertEqual(
+            inventory["source_rule_count"],
+            payload["crs"]["inbound_pl2_rule_count"],
+        )
+        self.assertEqual(
+            sum(inventory["classification_counts"].values()),
+            inventory["source_rule_count"],
+        )
+        self.assertEqual(inventory["unsupported_score_bearing_ids"], [])
+        self.assertEqual(
+            set(inventory["classification_counts"]),
+            {"control-or-setup", "generated", "runtime-native"},
+        )
 
     def test_strict_manifest_rejects_untracked_crs_input(self):
         original_git = manifest_module.git
@@ -315,6 +423,7 @@ class BenchmarkHarnessTest(unittest.TestCase):
  99.000%    4.38ms
  99.900%    5.25ms
  100.000%    7.00ms
+#[Max = 7.000, Total count = 100000]
   100001 requests in 10.00s
 Requests/sec: 10000.10
 """
@@ -323,8 +432,76 @@ Requests/sec: 10000.10
         self.assertEqual(parsed["latency_us"]["p99_9"], 5250.0)
         self.assertEqual(parsed["latency_us"]["max"], 7000.0)
         self.assertEqual(parsed["accepted_requests"], 100001)
+        self.assertEqual(parsed["latency_samples"], 100000)
         self.assertEqual(parsed["socket_errors"], 0)
         self.assertEqual(parsed["socket_error_breakdown"], {})
+
+    def test_wrk_parser_accepts_exact_expected_block_status(self):
+        raw = """
+ 50%  1.00ms
+  100 requests in 10.00s
+Requests/sec: 10.00
+Non-2xx or 3xx responses: 100
+LuminaExpectedResponses: 100
+LuminaUnexpectedResponses: 0
+"""
+        parsed = e2e_module.parse_wrk(
+            raw,
+            requested_rate=None,
+            min_samples=100,
+            expected_status=403,
+            required_percentiles={"p50"},
+        )
+        self.assertTrue(parsed["valid"])
+        self.assertEqual(parsed["accepted_requests"], 100)
+        self.assertEqual(parsed["non_success"], 100)
+        self.assertEqual(parsed["unexpected_responses"], 0)
+
+    def test_wrk_parser_withholds_unrequested_body_tails(self):
+        raw = """
+ 50.000%  1.00ms
+ 90.000%  2.00ms
+#[Max = 2.000, Total count = 1000]
+  1000 requests in 10.00s
+Requests/sec: 100.00
+LuminaExpectedResponses: 1000
+LuminaUnexpectedResponses: 0
+"""
+        parsed = e2e_module.parse_wrk(
+            raw,
+            requested_rate=100,
+            min_samples=1000,
+            expected_status=204,
+            required_percentiles={"p50", "p90"},
+        )
+        self.assertTrue(parsed["valid"])
+        self.assertNotIn("p99", parsed["latency_us"])
+
+    def test_wrk2_parser_rejects_empty_latency_histogram(self):
+        raw = """
+ 50.000%  0.00us
+ 90.000%  0.00us
+#[Max = 0.000, Total count = 0]
+  50 requests in 10.00s
+Requests/sec: 5.00
+Non-2xx or 3xx responses: 50
+LuminaExpectedResponses: 50
+LuminaUnexpectedResponses: 0
+"""
+        parsed = e2e_module.parse_wrk(
+            raw,
+            requested_rate=5,
+            min_samples=40,
+            expected_status=403,
+            required_percentiles={"p50"},
+        )
+        self.assertFalse(parsed["valid"])
+        self.assertEqual(parsed["accepted_requests"], 50)
+        self.assertEqual(parsed["latency_samples"], 0)
+        self.assertIn(
+            "empty wrk2 latency histogram",
+            parsed["invalid_reasons"],
+        )
 
     def test_wrk_parser_rejects_transport_errors(self):
         raw = """
@@ -478,6 +655,18 @@ Requests/sec: 10000.10
         )
         self.assertEqual(payload["comparators"]["coraza"]["external_rule_overrides"], [])
 
+    def test_comparators_share_explicit_request_body_processor_policy(self):
+        rules = config_generator_module.REQUEST_BODY_PROCESSOR_RULES
+        self.assertEqual(len(rules), 2)
+        self.assertIn("ctl:requestBodyProcessor=XML", rules[0])
+        self.assertIn("ctl:requestBodyProcessor=JSON", rules[1])
+        self.assertIn(r"[a-z0-9.-]+\+)?json", rules[1])
+
+        source = (
+            ROOT / "bench/benchmark_harness/generate_configs.py"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(source.count("*REQUEST_BODY_PROCESSOR_RULES"), 2)
+
     def test_allow_workload_generates_multi_request_lua(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "workload.lua"
@@ -503,6 +692,402 @@ Requests/sec: 10000.10
             with self.assertRaisesRegex(RuntimeError, "exactly one Host header"):
                 e2e_module.write_wrk_script(workload, root / "workload.lua")
 
+    def test_body_workloads_are_exact_valid_json_with_tail_attack(self):
+        for size_kib in body_workloads_module.BODY_SIZES_KIB:
+            clean = body_workloads_module.workload_payload(size_kib, "allow")
+            attack = body_workloads_module.workload_payload(size_kib, "attack")
+            for payload in (clean, attack):
+                body = payload["requests"][0]["body"]
+                self.assertEqual(len(body.encode("utf-8")), size_kib * 1024)
+                self.assertIsInstance(json.loads(body), dict)
+            self.assertNotIn(
+                body_workloads_module.TAIL_ATTACK,
+                clean["requests"][0]["body"],
+            )
+            self.assertTrue(
+                attack["requests"][0]["body"].endswith(
+                    f'"tail_probe":"{body_workloads_module.TAIL_ATTACK}"}}'
+                )
+            )
+
+    def test_body_workload_lua_records_exact_response_outcomes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workload = root / "body.json"
+            workload.write_text(
+                json.dumps(
+                    body_workloads_module.workload_payload(4, "attack")
+                ),
+                encoding="utf-8",
+            )
+            script = root / "body.lua"
+            count = e2e_module.write_wrk_script(
+                workload, script, request_class="attack"
+            )
+            rendered = script.read_text(encoding="utf-8")
+            self.assertEqual(count, 1)
+            self.assertIn("if status == 403 then", rendered)
+            self.assertIn("LuminaExpectedResponses", rendered)
+            self.assertIn("LuminaUnexpectedResponses", rendered)
+
+    def test_body_plan_uses_normalized_rate_and_coraza_closed_loop(self):
+        stability = []
+        for engine, rps in (
+            ("luminawaf", 1000.0),
+            ("modsecurity", 100.0),
+            ("coraza", 0.5),
+        ):
+            for connections in (1, 10):
+                stability.append(
+                    {
+                        "engine": engine,
+                        "connections": connections,
+                        "valid_runs": 5,
+                        "median_rps": rps,
+                        "cv_percent": 1.0,
+                        "diagnostic_available": True,
+                        "stable": True,
+                    }
+                )
+        plan = body_evidence_module.derive_body_plan(
+            {"stability": stability},
+            size_kib=128,
+            request_class="allow",
+            qualified=True,
+            repetitions=5,
+        )
+        legs = {item["engine"]: item for item in plan["legs"]}
+        self.assertEqual(legs["luminawaf"]["fixed_rate"], 600)
+        self.assertEqual(legs["modsecurity"]["fixed_rate"], 60)
+        self.assertEqual(
+            legs["coraza"]["measurement_mode"],
+            "single-connection-closed-loop",
+        )
+        self.assertEqual(legs["coraza"]["target_samples"], 100)
+        self.assertEqual(legs["coraza"]["required_percentiles"], ["p50"])
+
+        smoke_plan = body_evidence_module.derive_body_plan(
+            {"stability": stability},
+            size_kib=4,
+            request_class="attack",
+            qualified=False,
+            repetitions=1,
+        )
+        self.assertTrue(
+            all(item["duration_seconds"] >= 2 for item in smoke_plan["legs"])
+        )
+
+    def test_body_smoke_calibration_is_repeated_and_conservative(self):
+        self.assertEqual(
+            body_evidence_module.calibration_settings(
+                size_kib=4,
+                qualified=False,
+                requested_seconds=2.0,
+                measurement_repetitions=1,
+            ),
+            (5.0, 3),
+        )
+        self.assertEqual(
+            body_evidence_module.calibration_settings(
+                size_kib=128,
+                qualified=False,
+                requested_seconds=2.0,
+                measurement_repetitions=1,
+            ),
+            (10.0, 3),
+        )
+        self.assertEqual(
+            body_evidence_module.calibration_settings(
+                size_kib=4,
+                qualified=True,
+                requested_seconds=2.0,
+                measurement_repetitions=5,
+            ),
+            (30.0, 5),
+        )
+
+    def test_body_plan_records_calibration_latency_and_smoke_load(self):
+        stability = []
+        results = []
+        for engine, rps in (
+            ("luminawaf", 1000.0),
+            ("modsecurity", 100.0),
+            ("coraza", 10.0),
+        ):
+            stability.append(
+                {
+                    "engine": engine,
+                    "connections": 1,
+                    "valid_runs": 3,
+                    "median_rps": rps,
+                    "cv_percent": 2.0,
+                    "diagnostic_available": True,
+                    "stable": False,
+                }
+            )
+            results.extend(
+                {
+                    "engine": engine,
+                    "connections": 1,
+                    "valid": True,
+                    "latency_us": {
+                        "p50": 700.0 + repetition,
+                        "p90": 900.0 + repetition,
+                        "p99": 1200.0 + repetition,
+                    },
+                }
+                for repetition in range(3)
+            )
+        plan = body_evidence_module.derive_body_plan(
+            {"stability": stability, "results": results},
+            size_kib=4,
+            request_class="attack",
+            qualified=False,
+            repetitions=1,
+            load_fraction=body_evidence_module.SMOKE_LOAD_FRACTION,
+        )
+        by_engine = {item["engine"]: item for item in plan["legs"]}
+        self.assertEqual(by_engine["luminawaf"]["fixed_rate"], 400)
+        self.assertEqual(
+            by_engine["luminawaf"]["calibration_latency_us"]["p50"],
+            701.0,
+        )
+        self.assertEqual(
+            by_engine["luminawaf"]["load_fraction_ceiling"], 0.40
+        )
+        self.assertEqual(by_engine["luminawaf"]["calibration_runs"], 3)
+        self.assertEqual(
+            by_engine["coraza"]["measurement_mode"],
+            "single-connection-closed-loop",
+        )
+
+    def test_body_closed_loop_duration_uses_slowest_calibration_run(self):
+        stability = []
+        results = []
+        for engine, rps in (
+            ("luminawaf", 1000.0),
+            ("modsecurity", 100.0),
+            ("coraza", 12.95),
+        ):
+            stability.append(
+                {
+                    "engine": engine,
+                    "connections": 1,
+                    "valid_runs": 3,
+                    "median_rps": rps,
+                    "cv_percent": 2.0,
+                    "diagnostic_available": True,
+                    "stable": False,
+                }
+            )
+            observed = (
+                (8.32, 12.95, 13.58)
+                if engine == "coraza"
+                else (rps * 0.98, rps, rps * 1.02)
+            )
+            results.extend(
+                {
+                    "engine": engine,
+                    "connections": 1,
+                    "valid": True,
+                    "requests_per_second": observed_rps,
+                    "latency_us": {"p50": 1000.0},
+                }
+                for observed_rps in observed
+            )
+        plan = body_evidence_module.derive_body_plan(
+            {"stability": stability, "results": results},
+            size_kib=4,
+            request_class="attack",
+            qualified=False,
+            repetitions=1,
+            load_fraction=body_evidence_module.SMOKE_LOAD_FRACTION,
+        )
+        coraza = next(
+            item for item in plan["legs"] if item["engine"] == "coraza"
+        )
+        self.assertEqual(
+            coraza["measurement_mode"],
+            "single-connection-closed-loop",
+        )
+        self.assertEqual(coraza["calibration_rps_floor"], 8.32)
+        self.assertEqual(coraza["duration_seconds"], 6)
+
+    def test_body_latency_anomaly_detects_amplification_and_size_inversion(self):
+        measurements = [
+            {
+                "workload_id": "json-attack-4kib",
+                "size_kib": 4,
+                "request_class": "attack",
+                "engine": "luminawaf",
+                "plan": {
+                    "measurement_mode": "fixed-rate",
+                    "calibration_latency_us": {"p50": 707.0},
+                },
+                "results": [{
+                    "valid": True,
+                    "latency_us": {"p50": 85_890.0},
+                }],
+            },
+            {
+                "workload_id": "json-attack-16kib",
+                "size_kib": 16,
+                "request_class": "attack",
+                "engine": "luminawaf",
+                "plan": {
+                    "measurement_mode": "fixed-rate",
+                    "calibration_latency_us": {"p50": 2500.0},
+                },
+                "results": [{
+                    "valid": True,
+                    "latency_us": {"p50": 2990.0},
+                }],
+            },
+        ]
+        anomalies = body_evidence_module.classify_latency_anomalies(
+            measurements
+        )
+        self.assertEqual(len(anomalies), 1)
+        self.assertEqual(anomalies[0]["workload_id"], "json-attack-4kib")
+        self.assertTrue(
+            any(
+                "calibration p50" in reason
+                for reason in anomalies[0]["reasons"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "size-trend inversion" in reason
+                for reason in anomalies[0]["reasons"]
+            )
+        )
+
+    def test_body_report_discards_percentiles_outside_sampling_contract(self):
+        rows = report_module.body_e2e_rows({
+            "qualified_sampling": True,
+            "measurements": [{
+                "workload_id": "json-allow-128kib",
+                "size_kib": 128,
+                "request_class": "allow",
+                "engine": "coraza",
+                "valid": True,
+                "plan": {
+                    "measurement_mode": "single-connection-closed-loop",
+                    "fixed_rate": None,
+                    "connections": 1,
+                    "classification": "time-capped diagnostic",
+                    "sample_cap_reason": "comparator runtime cap",
+                    "required_percentiles": ["p50"],
+                    "target_samples": 100,
+                },
+                "results": [{
+                    "valid": True,
+                    "accepted_requests": 100,
+                    "latency_us": {
+                        "p50": 2_400_000.0,
+                        "p90": 2_700_000.0,
+                        "p99": 2_900_000.0,
+                        "p99_9": 3_100_000.0,
+                    },
+                }] * 5,
+            }],
+        })
+        self.assertEqual(len(rows), 1)
+        self.assertIsNotNone(rows[0]["p50"])
+        self.assertIsNone(rows[0]["p90"])
+        self.assertIsNone(rows[0]["p99"])
+        self.assertIsNone(rows[0]["p99_9"])
+
+    def test_body_report_marks_legacy_size_inversion_anomalous(self):
+        def measurement(size_kib, p50):
+            return {
+                "workload_id": f"json-attack-{size_kib}kib",
+                "size_kib": size_kib,
+                "request_class": "attack",
+                "engine": "luminawaf",
+                "valid": True,
+                "plan": {
+                    "measurement_mode": "fixed-rate",
+                    "fixed_rate": 100,
+                    "connections": 1,
+                    "classification": "bounded smoke diagnostic",
+                    "sample_cap_reason": "smoke runtime cap",
+                    "required_percentiles": ["p50"],
+                    "target_samples": 1,
+                },
+                "results": [{
+                    "valid": True,
+                    "accepted_requests": 100,
+                    "latency_us": {"p50": p50},
+                }],
+            }
+
+        rows = report_module.body_e2e_rows({
+            "qualified_sampling": False,
+            "measurements": [
+                measurement(4, 85_890.0),
+                measurement(16, 2990.0),
+                measurement(128, 13_580.0),
+            ],
+        })
+        by_size = {row["size_kib"]: row for row in rows}
+        self.assertTrue(by_size[4]["anomalous"])
+        self.assertFalse(by_size[16]["anomalous"])
+        self.assertIn(
+            "ANOMALOUS - investigation required",
+            report_module.body_evidence_class_text(by_size[4]),
+        )
+        self.assertFalse(by_size[4]["qualified"])
+
+    def test_body_report_labels_one_sample_as_observation(self):
+        text = report_module.body_percentile_text(
+            {
+                "required_percentiles": {"p50"},
+                "runs": 1,
+                "min_samples": 1,
+                "p50": 2_400_000.0,
+                "p50_ci": None,
+            },
+            "p50",
+        )
+        self.assertIn("single observation", text)
+        self.assertIn("not a percentile", text)
+
+    def test_body_rule_work_rows_extract_9341xx_counters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "body_micro.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "benchmarks": [
+                            {
+                                "run_name": (
+                                    "FullTransaction128KiB/LuminaWAF/"
+                                    "AllowJSONVaried/repeats:10"
+                                ),
+                                "aggregate_name": "median",
+                                "rule_934100_dispatches_per_tx": 2.0,
+                                "rule_934100_exact_calls_per_tx": 4.0,
+                                "rule_934100_exact_bytes_per_tx": 388549.0,
+                                "rule_934101_dispatches_per_tx": 2.0,
+                                "rule_934101_exact_calls_per_tx": 3.0,
+                                "rule_934101_exact_bytes_per_tx": 294008.0,
+                                "rule_934120_dispatches_per_tx": 6.0,
+                                "rule_934120_exact_calls_per_tx": 6.0,
+                                "rule_934120_exact_bytes_per_tx": 30.0,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rows = report_module.body_rule_work_rows([path])
+        by_rule = {row["rule_id"]: row for row in rows}
+        self.assertEqual(by_rule[934100]["exact_bytes"], 388549.0)
+        self.assertEqual(by_rule[934101]["exact_calls"], 3.0)
+        self.assertEqual(by_rule[934120]["dispatches"], 6.0)
+        self.assertFalse(by_rule[934100]["qualified"])
+
     def test_wrk_command_does_not_inject_headers_outside_the_workload(self):
         with mock.patch("subprocess.Popen") as popen, mock.patch.object(
             e2e_module, "pin_load_generator_threads", return_value=[]
@@ -518,6 +1103,20 @@ Requests/sec: 10000.10
         self.assertNotIn("-H", command)
         self.assertEqual(command.count("/tmp/wrk"), 1)
         self.assertEqual(result.returncode, 0)
+
+    def test_wrk_command_records_explicit_request_timeout(self):
+        with mock.patch("subprocess.Popen") as popen, mock.patch.object(
+            e2e_module, "pin_load_generator_threads", return_value=[]
+        ):
+            process = popen.return_value
+            process.communicate.return_value = ("", "")
+            process.returncode = 0
+            e2e_module.run_wrk(
+                Path("/tmp/wrk"), "2", 19090, "1s", 1, 1, None,
+                Path("/tmp/workload.lua"), "30s",
+            )
+        command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("--timeout") + 1], "30s")
 
     def test_task_affinity_binds_one_task_per_cpu_and_verifies_it(self):
         with mock.patch("os.sched_setaffinity") as set_affinity, mock.patch(
@@ -569,6 +1168,48 @@ Requests/sec: 10000.10
                 self.assertNotEqual(cursor, -1, token)
                 cursor += len(token)
 
+    def test_direct_body_comparison_registers_identical_varied_fixture(self):
+        source = (ROOT / "bench/benchmark_harness/lumina_benchmark_harness.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "varied ? make_varied_clean_body_request() : make_clean_body_request()",
+            source,
+        )
+        for engine in ("LuminaWAF", "ModSecurity", "Coraza"):
+            self.assertIn(
+                f'FullTransaction128KiB/{engine}/AllowJSONVaried',
+                source,
+            )
+
+    def test_lumina_body_diagnostics_expose_logical_work_accounting(self):
+        source = (
+            ROOT / "bench/benchmark_harness/lumina_benchmark_harness.cpp"
+        ).read_text(encoding="utf-8")
+        for counter in (
+            "exact_verifier_calls_per_tx",
+            "exact_verifier_bytes_per_tx",
+            "exact_verifier_subjects_ge_4k_per_tx",
+            "exact_verifier_subjects_ge_64k_per_tx",
+            "exact_verifier_max_subject_bytes",
+            "transformed_exact_verifier_bytes_per_tx",
+            "transform_steps_per_tx",
+            "transform_input_bytes_per_tx",
+            "transform_copy_bytes_per_tx",
+            "transform_views_per_tx",
+            "transform_cache_hits_per_tx",
+            "_input_bytes_per_tx",
+        ):
+            self.assertIn(counter, source)
+        self.assertIn('"_exact_"', source)
+        self.assertIn('"calls_per_tx"', source)
+        self.assertIn('"bytes_per_tx"', source)
+
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn(
+            "LUMINA_PARSER_SRC_EFFECTIVE_COMPILE_DEFINITIONS", cmake)
+        self.assertIn("-DLUMINA_DATAPLANE_DIAGNOSTICS=1", cmake)
+
     def test_coraza_ftw_summary_rejects_outcome_overrides(self):
         summary = coraza_module.normalize_ftw(
             {"run": 4, "success": ["1", "2", "3"], "failed": ["4"],
@@ -595,6 +1236,7 @@ Requests/sec: 10000.10
  90.000%  2.00ms
  99.000%  3.00ms
  99.900%  4.00ms
+#[Max = 4.000, Total count = 99998]
   99999 requests in 10.00s
 Requests/sec: 9999.90
 """
@@ -617,7 +1259,11 @@ Requests/sec: 9999.90
                             "scaling_qualification": {
                                 "requested": True, "valid": True,
                             },
-                            "phases": {"scaling": "passed"}}), encoding="utf-8"
+                            "phases": {
+                                "body": "passed",
+                                "e2e": "passed",
+                                "scaling": "passed",
+                            }}), encoding="utf-8"
             )
             (result / "environment.json").write_text(
                 json.dumps({
@@ -699,6 +1345,9 @@ Requests/sec: 9999.90
             self.assertIn("shared-loaded-homelab", rendered)
             self.assertIn("Background services remained active.", rendered)
             self.assertIn("A host annotation documents contention", rendered)
+            self.assertIn("| Request-body evidence | diagnostic only |", rendered)
+            self.assertIn("| Fixed-rate E2E | diagnostic only |", rendered)
+            self.assertIn("| Saturation stability | diagnostic only |", rendered)
             self.assertIn("Multi-Worker Scaling", rendered)
             self.assertIn("95.00%", rendered)
             self.assertIn("client CPU <=87.5%", rendered)
@@ -811,6 +1460,125 @@ Requests/sec: 9999.90
             run_module.derive_sampling_plan(
                 saturation, target_samples=100_000, load_fraction=0.61,
             )
+
+    def test_overhead_micro_order_rotates_independent_boundaries(self):
+        orders = [
+            [
+                name for _, name in
+                run_module.rotated_overhead_micro_boundaries(index)
+            ]
+            for index in range(5)
+        ]
+        self.assertEqual(len(set(tuple(order) for order in orders[:3])), 3)
+        self.assertTrue(
+            all(
+                set(order)
+                == {name for _, name in run_module.OVERHEAD_MICRO_BOUNDARIES}
+                for order in orders
+            )
+        )
+        self.assertEqual(
+            run_module.repeated_benchmark_filter(
+                "Overhead/LuminaWAF/FullDirect/AllowRotation", 10
+            ),
+            "^Overhead/LuminaWAF/FullDirect/AllowRotation/repeats:10$",
+        )
+
+    def test_micro_validation_reports_empty_json_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "empty.json"
+            path.write_text("", encoding="utf-8")
+            evidence = run_module.validate_benchmark_artifacts(
+                [path], {"Overhead/Test"}, 1, 10
+            )
+        self.assertFalse(evidence["valid"])
+        self.assertTrue(
+            any("invalid JSON artifact" in error for error in evidence["errors"])
+        )
+
+    def test_cross_phase_baseline_gate_rejects_smoke_rate_inversion(self):
+        def phase(rate, cpu, runs=5, stable=True):
+            results = []
+            for repetition in range(runs):
+                results.append({
+                    "engine": "baseline",
+                    "table": "baseline",
+                    "valid": True,
+                    "connections": 10,
+                    "repetition": repetition,
+                    "requests_per_second": rate,
+                    "server_cpu_ns_per_request": cpu,
+                    "client_cpu_utilization_percent": 50.0,
+                    "config_sha256": "config",
+                    "normalized_config_sha256": "normalized",
+                    "workload_sha256": "workload",
+                    "allow_response_contract_sha256": "response",
+                    "server_cpu": "1",
+                    "client_cpu": "2",
+                    "workers": 1,
+                })
+            return {
+                "results": results,
+                "stability": [{
+                    "engine": "baseline",
+                    "connections": 10,
+                    "valid_runs": runs,
+                    "stable": stable,
+                }],
+            }
+
+        valid = run_module.baseline_phase_consistency(
+            phase(48_000.0, 20_000.0),
+            phase(47_000.0, 21_000.0),
+            required_connections={10},
+            required_runs=5,
+            require_stable=True,
+        )
+        self.assertTrue(valid["valid"])
+
+        inverted = run_module.baseline_phase_consistency(
+            phase(20_000.0, 32_000.0, runs=1, stable=False),
+            phase(48_000.0, 20_000.0, runs=1, stable=False),
+            required_connections={10},
+            required_runs=1,
+            require_stable=False,
+        )
+        self.assertFalse(inverted["valid"])
+        self.assertGreater(inverted["rows"][0]["rps_delta_percent"], 100.0)
+        self.assertTrue(
+            any("RPS phase delta" in error for error in inverted["errors"])
+        )
+
+    def test_saturation_row_requires_client_headroom(self):
+        results = [
+            {
+                "engine": "baseline",
+                "table": "baseline",
+                "valid": True,
+                "connections": 10,
+                "requests_per_second": 50_000.0 + repetition,
+                "server_cpu_ns_per_request": 20_000.0,
+                "client_cpu_utilization_percent": 95.0,
+            }
+            for repetition in range(5)
+        ]
+        rows = report_module.saturation_rows({
+            "canonical_requested": True,
+            "max_client_utilization_percent": 90.0,
+            "results": results,
+            "stability": [{
+                "engine": "baseline",
+                "connections": 10,
+                "valid_runs": 5,
+                "cv_percent": 0.1,
+                "stable": False,
+                "sustainable": True,
+                "client_headroom": False,
+            }],
+        })
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["qualified"])
+        self.assertFalse(rows[0]["client_headroom"])
 
     def test_scaling_plan_assigns_disjoint_cpu_prefixes(self):
         plan = run_module.derive_scaling_plan("4-11", "12-15")

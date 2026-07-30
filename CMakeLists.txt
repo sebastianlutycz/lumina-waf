@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(lumina-waf VERSION 0.4.0 LANGUAGES CXX C)
+project(lumina-waf VERSION 0.4.2 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,6 +12,18 @@ option(LUMINA_NATIVE_TUNING "Enable -march=native for a host-local build" OFF)
 option(LUMINA_LOCAL_FUNCTION_BINDING
     "Bind calls between functions defined by libluminawaf locally on ELF platforms"
     ON)
+option(LUMINA_DATAPLANE_DIAGNOSTICS
+    "Enable test-only request dataplane work counters"
+    OFF)
+option(LUMINA_9341XX_SHARED_BASE64
+    "Share identity-proven Base64 output across the CRS 9341xx multiMatch family"
+    ON)
+option(LUMINA_LEGACY_JSON_STRING_MATERIALIZATION
+    "Use the pre-v0.4.2 JSON projection copy path for controlled A/B measurements"
+    OFF)
+mark_as_advanced(
+    LUMINA_9341XX_SHARED_BASE64
+    LUMINA_LEGACY_JSON_STRING_MATERIALIZATION)
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" LUMINA_SYSTEM_PROCESSOR)
 set(LUMINA_ARCH_COMPILE_OPTIONS)
 if(LUMINA_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
@@ -73,6 +85,18 @@ endif()
 
 # Compile every materialized parser source into a position-independent object
 # with the C compiler selected by the configured toolchain.
+set(LUMINA_PARSER_SRC_COMPILE_DEFINITIONS "" CACHE STRING
+    "Semicolon-separated compile definitions for materialized parser sources")
+set(LUMINA_PARSER_SRC_EFFECTIVE_COMPILE_DEFINITIONS
+    ${LUMINA_PARSER_SRC_COMPILE_DEFINITIONS})
+if(LUMINA_DATAPLANE_DIAGNOSTICS)
+    list(APPEND LUMINA_PARSER_SRC_EFFECTIVE_COMPILE_DEFINITIONS
+        -DLUMINA_DATAPLANE_DIAGNOSTICS=1)
+endif()
+if(LUMINA_9341XX_SHARED_BASE64)
+    list(APPEND LUMINA_PARSER_SRC_EFFECTIVE_COMPILE_DEFINITIONS
+        -DLUMINA_ENABLE_9341XX_SHARED_BASE64=1)
+endif()
 set(PARSER_SRC_OBJS "")
 foreach(r ${PARSER_RULES_SOURCES} ${PARSER_INPUT})
     get_filename_component(r_name ${r} NAME_WE)
@@ -83,6 +107,7 @@ foreach(r ${PARSER_RULES_SOURCES} ${PARSER_INPUT})
             -fPIC
             ${LUMINA_PARSER_SRC_OPT_LEVEL}
             ${LUMINA_ARCH_COMPILE_OPTIONS}
+            ${LUMINA_PARSER_SRC_EFFECTIVE_COMPILE_DEFINITIONS}
             -I ${CMAKE_CURRENT_SOURCE_DIR}/src
             -c ${r}
             -o ${r_obj}
@@ -120,6 +145,10 @@ set_source_files_properties(
     src/lumina_sqli.c
     PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden"
 )
+set_source_files_properties(
+    src/lumina_xml_parser.c
+    PROPERTIES COMPILE_OPTIONS "-fvisibility=hidden"
+)
 # Generated sources (src/generated/*.c) use includes rooted at src/
 # (e.g. "generated/crs_transform_mask.h", "lumina_transforms.h"). Without
 # this include root the generated transform-mask translation unit fails to
@@ -127,6 +156,14 @@ set_source_files_properties(
 target_include_directories(luminawaf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+if(LUMINA_DATAPLANE_DIAGNOSTICS)
+    target_compile_definitions(luminawaf PRIVATE
+        LUMINA_DATAPLANE_DIAGNOSTICS=1)
+endif()
+if(LUMINA_LEGACY_JSON_STRING_MATERIALIZATION)
+    target_compile_definitions(luminawaf PRIVATE
+        LUMINA_LEGACY_JSON_STRING_MATERIALIZATION=1)
+endif()
 if(UNIX AND NOT APPLE)
     # The C++ driver is used for the mixed C/C++ target, but the runtime does
     # not consume libstdc++ symbols. Drop unused driver defaults and reject any
@@ -135,7 +172,7 @@ if(UNIX AND NOT APPLE)
     if(LUMINA_LOCAL_FUNCTION_BINDING)
         # LuminaWAF does not support interposing its internal calls. Binding
         # functions locally removes avoidable PLT/GOT traffic while retaining
-        # the current dynamic symbol set for the v0.4.0 RC ABI review.
+        # the current dynamic symbol set for the v0.4.x ABI review.
         target_link_options(luminawaf PRIVATE -Wl,-Bsymbolic-functions)
 
         if(CMAKE_READELF)
@@ -188,6 +225,10 @@ target_include_directories(lumina_benchmark_harness PRIVATE
 target_compile_definitions(lumina_benchmark_harness PRIVATE
     LUMINA_BENCH_V1_DEFAULT_MODSEC_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/tests/eval_suite/modsec_crs_pl2.conf"
 )
+if(LUMINA_DATAPLANE_DIAGNOSTICS)
+    target_compile_definitions(lumina_benchmark_harness PRIVATE
+        LUMINA_DATAPLANE_DIAGNOSTICS=1)
+endif()
 target_link_libraries(lumina_benchmark_harness PRIVATE ${LUMINA_BENCH_V1_BENCHMARK_TARGET} pthread ${LUMINA_BENCH_V1_MODSEC_TARGET} luminawaf dl)
 
 # Corpus Benchmark (Mmap large access logs)
@@ -217,6 +258,24 @@ add_executable(rc_runtime_sanity
 )
 target_include_directories(rc_runtime_sanity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(rc_runtime_sanity PRIVATE luminawaf)
+
+# CPU-time complexity gate for transformed request-body search. This target is
+# explicit because it is a performance regression test, not a portable unit test.
+add_executable(request_body_complexity
+    tests/performance/request_body_complexity.cpp
+)
+target_include_directories(request_body_complexity PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(LUMINA_DATAPLANE_DIAGNOSTICS)
+    target_compile_definitions(request_body_complexity PRIVATE
+        LUMINA_DATAPLANE_DIAGNOSTICS=1)
+endif()
+target_link_libraries(request_body_complexity PRIVATE luminawaf)
+add_custom_target(request_body_complexity_gate
+    COMMAND request_body_complexity
+    DEPENDS request_body_complexity
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    USES_TERMINAL
+)
 
 # Fuzzer (LLVM libFuzzer)
 # To run this, compile with Clang and enable Fuzzer sanitizers.
