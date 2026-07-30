@@ -12,6 +12,12 @@ The production request path does not parse CRS rule files, load a regular-expres
 
 The current release line is `v0.4.x`.
 
+> [!IMPORTANT]
+> The `experimental/v0.4.2` branch prepares the `v0.4.2-ec.1` experimental candidate for bounded
+> request-body inspection. It has not completed a v0.4.2 canonical performance qualification.
+> Every canonical figure and evidence link below remains scoped exclusively to the exact
+> `v0.4.0-rc.11` source and workloads unless stated otherwise.
+
 > [!WARNING]
 > LuminaWAF is a systems-engineering research prototype and portfolio project.
 >
